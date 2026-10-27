@@ -13,7 +13,7 @@ This repo currently holds the planning docs. Mantiza uses Google's [Artemis](htt
 | Tech stack | [tech-stack.md](Mantiza%20Roadmap/tech-stack.md) | [tech-stack.md](Google%20Artemis%20Analysis/tech-stack.md) |
 | Roadmap and phases | [roadmap.md](Mantiza%20Roadmap/roadmap.md) | [roadmap.md](Google%20Artemis%20Analysis/roadmap.md) |
 
-New here? Start with the [Mantiza plan](Mantiza%20Roadmap/plan.md).
+New here? Start with the [Mantiza plan](Mantiza%20Roadmap/plan.md). Unfamiliar terms are explained in the [glossary](Mantiza%20Roadmap/glossary.md).
 
 ## Legend
 
