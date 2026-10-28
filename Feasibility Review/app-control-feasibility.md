@@ -113,7 +113,7 @@ A small test helper app is installed on the iPhone. A computer talks to it and i
 
 The iPhone's AssistiveTouch feature accepts a Bluetooth or wired mouse, and a pointer can click anything on screen ✅ [S7]. A small board (for example an ESP32) could pretend to be a mouse, and Mantiza could tell it where to click. To see the screen, Mantiza would use screen broadcasting (ReplayKit), which shows a recording indicator.
 
-**Limitations:** extra hardware, fiddly setup, a visible pointer, experimental. Not "download and done". _(Not tested by us.)_
+**Limitations:** extra hardware, fiddly setup, a visible pointer, experimental. Not "download and done". _(Not tested by us.)_ Full research: [Fake Mouse.md](Fake%20Mouse.md).
 
 ### Way 4: Apple's official routes (App Intents, Shortcuts, app links)
 
