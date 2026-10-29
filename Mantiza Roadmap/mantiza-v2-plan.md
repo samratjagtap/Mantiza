@@ -50,7 +50,7 @@ Mantiza's differences:
 | **Personalised workflow widget** with tabs | Turns the agent into a one-tap daily tool |
 | **Dedicated battery device with a status screen and buttons** | Works in a pocket; shows what it is doing; physical approve/stop |
 | **Safety built in**: blocked sensitive apps, approval before paying or sending | None of the existing projects have this |
-| **Apple's own AI where possible** (on-device model, Private Cloud Compute) with a cloud fallback | Privacy, no API keys for the user _(quality must be tested)_ |
+| **Frontier cloud AI with computer-use tools (Claude or Gemini) + Apple's on-device OCR** | Strong Hindi support and models built to operate screens; OCR gives exact text positions for accurate taps |
 | **Shortcuts first, taps last** | Faster and more reliable than tapping every step _(idea)_ |
 
 ---
@@ -64,7 +64,7 @@ Mantiza's differences:
 | App sends commands to the board while in the background | ✅ Doable | `bluetooth-central` background mode: "The app communicates with a Bluetooth accessory while in the background" [P5] |
 | Widget with tabs and one-tap workflows | ✅ Doable, with one limit | Widgets support `Button` and `Toggle` with App Intents, "without launching the app", and every tap reloads the widget [P9]. **Limit:** a workflow needs screen capture, so the tap must **open the Mantiza app** (via `Link`/`widgetURL`) [P9] ❓ (see 6.4) |
 | Hindi voice input | ✅ Doable | Apple lists **Dictation** for Hindi (India) [P10]; `SFSpeechRecognizer` lists `hi-IN` in sample output 📰 [P11]. Apple's newer `SpeechTranscriber` appears **not** to support Hindi 📰 [P12] |
-| Hindi understanding (chat and planning) | ⚠️ Doable with a cloud model | **Apple Intelligence does not support Hindi** in iOS 27 (16 languages listed, no Hindi) [P13]. We use a cloud model for Hindi (section 7) |
+| Hindi understanding (chat and planning) | ✅ Doable with a cloud model | **Apple Intelligence does not support Hindi** in iOS 27 (16 languages listed, no Hindi) [P13]; Claude's Hindi score is 96.7% of English [P26]. The cloud model is our main brain (section 4.3) |
 | Typing Hindi into other apps | ⚠️ Doable in principle, must test | Paste approach: iOS treats **⌘V** as user intent, so no paste alert [P14]; key combos work over Bluetooth 📰 [P8]. Writing the clipboard from the background is ❓ |
 | Battery device with a screen | ✅ Doable with ready-made hardware | M5StickS3: ESP32-S3, 250 mAh battery, 1.14" screen, 2 buttons, IMU, mic, speaker [P15] |
 | Phone in pocket while Mantiza works | ❌ Not fully | Mantiza needs the phone **unlocked and on screen** during a task; protected content and some screens are not captured [P2][P16] |
@@ -86,7 +86,7 @@ Mantiza's differences:
                       │  ├─ Safety: block list, approvals, stop                              │
                       │  └─ Memory: workflows, patterns ──► Widget (App Group storage)       │
                       │                                                                       │
-                      │        ▲ AI calls: Apple on-device / Private Cloud Compute / cloud   │
+                      │        ▲ AI calls: Claude or Gemini (main) + Apple on-device OCR     │
                       └────────┼─────────────────────────────┬───────────────────────────────┘
                                │                              │ Bluetooth (our command channel)
                                │                              ▼
@@ -118,16 +118,24 @@ Mantiza's differences:
 6. **Finish:** report result, save the run, update patterns, stop capture.
 
 ### 4.3 AI layer
-Apple's Foundation Models framework (iOS 27) gives us one interface for several models [P17]:
 
-| Model | Use | Facts |
+**Decision (2026-10-29): a cloud model (Claude or Gemini) is the main brain. Apple's AI is a helper.**
+
+Why:
+- **Hindi:** Apple Intelligence supports 16 languages and **Hindi is not one of them** [P13]. Claude scores **96.7%** of its English performance in Hindi (Claude Sonnet 4.5; 92.4% for Haiku 4.5) [P26].
+- **Operating screens:** Claude has a **computer use tool** (screenshots, clicks at coordinates, typing, key combinations, drag, scroll, zoom into small text) [P27]. Gemini has **computer use** with a **mobile mode** (tap, long press, drag at coordinates); it is a **Preview** feature and the mobile mode is **Android-optimised** [P28]. Apple's models have no equivalent tool.
+- **Model strength:** Apple's on-device context is **8,192 tokens** and PCC's is **32,000** [P17]; a review calls Apple's models "vastly behind the latest state of the AI frontier" 📰 [P29].
+
+| Model | Role | Facts |
 |---|---|---|
-| **Apple on-device model** | Fast, private steps; English | Now accepts **image input** ("the on-device model is also gaining Vision capabilities"); context shown as **8,192 tokens** [P17] |
-| **Apple Private Cloud Compute (PCC)** | Harder planning; English | "32,000 token context window... reasoning"; "no cloud API costs to developers who have less than 2 million first time downloads"; "No prompts are ever stored" [P17] |
-| **OCR tool** | Read on-screen text with positions | "the OCRTool allows the model to extract structured text from images" [P17] |
-| **Cloud model (Claude or Gemini)** | **Hindi and other non-Apple languages**, and fallback when Apple's models fail | Plugs in through the `LanguageModel` protocol; "Anthropic and Google are publishing Swift packages"; billed per token [P17] |
+| **Cloud model: Claude (Sonnet 5.5 or Haiku 5.5) or Gemini (3.8 Flash)** | **Main brain:** understand the request (any language), plan, choose each action, write Hindi text | Claude computer use supported on Claude 5.5 models [P27]; Gemini computer use models include `gemini-3.8-flash` (recommended) [P28]. Billed per token. We pick one after test T8 |
+| **Apple OCR tool (on-device)** | Read all on-screen text **with positions** and send it to the cloud model alongside the screenshot, so taps land on exact targets | "the OCRTool allows the model to extract structured text from images" [P17]; free and private |
+| **Apple on-device model** _(optional)_ | Small English-only jobs (e.g. classify a simple command), offline/privacy mode | Accepts image input; 8,192-token context [P17] |
+| **Apple Private Cloud Compute** _(optional)_ | Possible cheaper English fallback | 32,000-token context; "no cloud API costs to developers who have less than 2 million first time downloads"; "No prompts are ever stored"; daily per-user limits [P17] |
 
-**Important:** Apple Intelligence supports 16 languages and **Hindi is not one of them** [P13]. So Hindi requests go to the cloud model. Whether Apple's models are good enough for app control in English is ❓ and is the first thing we test.
+All of these plug in through Apple's `LanguageModel` protocol ("Anthropic and Google are publishing Swift packages") [P17], so we can switch models later without rewriting the app.
+
+**Trade-offs of cloud-first:** pay per token (reduce by sending downsized screenshots plus OCR text), screenshots leave the phone (clear consent, block list for sensitive apps), and it needs internet plus a small key server.
 
 **Keys and security:** never ship API keys in the app; Apple says to "Always fetch access tokens with a secure mechanism like OAuth, and store them securely using KeyChain" [P17]. We run a small backend that holds cloud keys.
 
@@ -206,7 +214,7 @@ Example (large widget):
 
 ### 6.1 Chat (text)
 - Users can type in Hindi (Devanagari), English or Hinglish (Hindi in Latin letters).
-- Apple Intelligence does **not** support Hindi [P13], so Hindi and Hinglish go to the **cloud model**, which also converts Hinglish to proper Hindi script when needed ("mai aa rha hu" → "मैं आ रहा हूँ").
+- Apple Intelligence does **not** support Hindi [P13]; the **cloud model** (our main brain) handles Hindi and Hinglish, and also converts Hinglish to proper Hindi script when needed ("mai aa rha hu" → "मैं आ रहा हूँ").
 
 ### 6.2 Voice
 | Option | Hindi? | Notes |
@@ -334,7 +342,7 @@ Facts from M5Stack's documentation [P15]:
 | **Ask before anything that cannot be undone** | Sending messages, posting, buying, deleting: approval on phone **and** device screen |
 | **Payments stay with the user** | Mantiza never types card numbers, PINs or OTPs; the user completes payment |
 | **Always stoppable** | Stop in app, Dynamic Island, device button, or shake |
-| **Screen data** | Use Apple on-device/PCC models where possible; cloud only with clear consent; never store full video, only selected step images (deletable) |
+| **Screen data** | Screenshots go to the cloud model only with clear consent (disclosed by name: Anthropic or Google); send downsized frames; never capture blocked apps; never store full video, only selected step images (deletable) |
 | **Clipboard** | Expiring, local-only items [P14] |
 | **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval |
 | **Device security** | Bond only with the owner's phone; signed commands on our channel; reject commands when not bonded |
@@ -348,7 +356,8 @@ Facts from M5Stack's documentation [P15]:
 | iOS app | Swift 6, SwiftUI, iOS 27+ | ScreenCaptureKit on iPhone needs iOS 27 [P4] |
 | Screen capture | ScreenCaptureKit (`SCContentSharingPicker`, `SCStream`) | ✅ [P4] |
 | Bluetooth | Core Bluetooth (`bluetooth-central` background mode) | ✅ [P5] |
-| AI | Foundation Models: on-device + PCC + Claude/Gemini via `LanguageModel` | ✅ [P17] |
+| AI (main) | Claude (Sonnet 5.5 / Haiku 5.5) or Gemini (3.8 Flash), via Foundation Models' `LanguageModel` protocol | ✅ [P17][P27][P28] |
+| AI (helpers) | Apple OCR tool; optional Apple on-device model / PCC for small English jobs | ✅ [P17] |
 | OCR | Foundation Models `OCRTool` / Vision framework | ✅ [P17] |
 | Speech | `SFSpeechRecognizer` (Hindi) + `SpeechTranscriber` (supported languages) + cloud fallback | 📰 [P11][P12] |
 | Widget | WidgetKit + App Intents (`Button(intent:)`, `Link`) | ✅ [P9] |
@@ -374,7 +383,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 | T5 | **Hindi paste** | Clipboard written before switching apps; ⌘V pastes "मैं आ रहा हूँ" into Messages and WhatsApp |
 | T6 | Clipboard write from the background | Works or not (decides the design in 6.3) |
 | T7 | `SFSpeechRecognizer` `hi-IN` on device | Hindi and Hinglish recognised acceptably |
-| T8 | Apple models vs cloud model on 20 English tasks | Success rate and seconds per step |
+| T8 | Claude vs Gemini (with Apple OCR text added) on 20 English + 10 Hindi tasks; Apple models as an optional comparison | Success rate, seconds per step, cost per task; pick the main model |
 | T9 | Device battery life with Bluetooth + screen | Hours of use and standby |
 | T10 | Hindi font on the device screen | Readable Devanagari on 135 × 240 |
 
@@ -404,8 +413,9 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 |---|---|---|
 | Hindi paste does not work in some apps | Hindi typing fails there | Method B (Hindi hardware layout); show "paste failed" and ask the user |
 | Screen capture stops in the background or on lock | Tasks break | Keep phone awake during tasks; resume from the same step (as existing projects do 📰 [P1]) |
-| Apple's models too weak for app control | Lower success | Cloud model fallback through the same interface [P17] |
-| Cloud AI cost and privacy | Cost per task; screenshots leave the phone | Use Apple models first; send downsized frames; clear consent |
+| Chosen cloud model underperforms or changes | Lower success | Swap between Claude and Gemini through the same interface [P17] |
+| Cloud AI cost and privacy | Cost per task; screenshots leave the phone | Downsized frames + OCR text; record-once replay (section 8) to cut AI calls; clear consent; block list |
+| Gemini's mobile computer use is Preview and Android-optimised | May behave worse on iPhone screens | Compare in T8; Claude as alternative [P27][P28] |
 | Taps land in the wrong place | Wrong actions | Absolute positioning, OCR targets, verify every step, approval before irreversible actions |
 | Battery life too short | Device dies mid-task | Screen sleep, deep sleep, larger battery in the custom device |
 | Other apps' terms of use | Accounts flagged for automation | Personal use first; avoid social media automation (one project reports shadow-bans 📰 [Fake Mouse doc]) |
@@ -415,7 +425,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 
 ## 13. Open questions for the team
 1. Who owns firmware (device) vs iOS app development?
-2. Which cloud model for Hindi: Claude or Gemini? (Test both in T8.)
+2. Which cloud model is the main brain: Claude or Gemini? (Test both in T8.)
 3. Which second language after Hindi?
 4. Do we buy 2–3 M5StickS3 units for Phase 0?
 
@@ -455,3 +465,7 @@ We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **r
 | P23 | [Espressif: ble_ota component](https://components.espressif.com/components/espressif/ble_ota) |
 | P24 | [Espressif: ESP-SR component](https://components.espressif.com/components/espressif/esp-sr) |
 | P25 | [NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino) |
+| P26 | [Claude docs: Multilingual support](https://platform.claude.com/docs/en/build-with-claude/multilingual-support) |
+| P27 | [Claude docs: Computer use tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool) |
+| P28 | [Gemini API docs: Computer use](https://ai.google.dev/gemini-api/docs/computer-use) |
+| P29 | [MacStories: iOS and iPadOS 27 review](https://www.macstories.net/stories/ios-and-ipados-27-review/4/) |
