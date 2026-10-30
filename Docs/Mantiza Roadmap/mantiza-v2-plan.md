@@ -1,6 +1,6 @@
 # Mantiza v2: Product and Build Plan
 
-_Written: 2026-10-29 · Status: plan, nothing built yet · Supersedes the "how Mantiza acts" parts of [plan.md](plan.md) · Background: [Feasibility review](../Feasibility%20Review/app-control-feasibility.md), [Fake Mouse deep dive](../Feasibility%20Review/Fake%20Mouse.md)_
+_Written: 2026-10-29 · Updated: 2026-10-30 (English first, two-brain AI with Jev, speed) · Status: plan, nothing built yet · Supersedes the "how Mantiza acts" parts of [plan.md](plan.md) · Background: [Feasibility review](../Feasibility%20Review/app-control-feasibility.md), [Fake Mouse deep dive](../Feasibility%20Review/Fake%20Mouse.md)_
 
 ## How to read this document
 
@@ -16,11 +16,15 @@ Sources are numbered like [P1] and listed in section 15.
 
 **Scope decision (2026-10-29):** we build first and do **not** target the App Store for now. We write **our own code**, using existing open-source projects only as reference.
 
+**Scope decision (2026-10-30): English only for the first version.** Hindi and other languages come later (Phase 3 onwards). The Hindi parts of this plan (sections 6.2–6.5, tests T5–T7, T10 and T13) are kept as the plan **for later**, not for now.
+
+**AI decision (2026-10-30): two brains.** A fast decision model (**TypeSafe's Jev**) picks most taps; a frontier model (**Claude or Gemini**) understands, plans, writes text and handles hard steps (section 4.3). This must pass test T11 first.
+
 ---
 
 ## 1. What Mantiza v2 is
 
-Mantiza is an AI assistant that **uses your iPhone apps for you**. You tell it what to do (by voice or text, in English, Hindi or mixed "Hinglish"), and it operates the apps on your phone the way a person would, through a small pocket device.
+Mantiza is an AI assistant that **uses your iPhone apps for you**. You tell it what to do (by voice or text; **English first**, Hindi and "Hinglish" later), and it operates the apps on your phone the way a person would, through a small pocket device.
 
 It has four parts:
 
@@ -28,7 +32,7 @@ It has four parts:
 |---|---|---|
 | 1 | **iOS app** | The brain: understands the request, watches the screen, decides each step, asks before sensitive actions |
 | 2 | **Home screen widget** | Your usual workflows, personalised and grouped in tabs; one tap to run |
-| 3 | **Multi-language** | Chat, voice and typing in Hindi, English and other languages, including typing Hindi into other apps |
+| 3 | **Languages** | **v1: English** chat, voice and typing. **Later:** Hindi and other languages, including typing Hindi into other apps |
 | 4 | **Mantiza device** | A pocket ESP32 device with a battery and a small screen. It acts as the "hands" (Bluetooth mouse and keyboard) and shows live status |
 
 **One-line pitch:** _"Say it in your language, Mantiza does it on your phone, safely."_
@@ -46,11 +50,12 @@ Mantiza's differences:
 
 | Mantiza v2 | Why it matters |
 |---|---|
-| **Hindi and other languages**, including typing them into any app | All existing projects are English-only |
+| **Hindi and other languages** (later; v1 is English), including typing them into any app | All existing projects are English-only |
+| **Two-brain AI for speed:** a fast picker (Jev) chooses most taps, a frontier model plans and handles hard steps | Existing iPhone projects call one big vision model for every step, "most of it the model" 📰 [P1] |
 | **Personalised workflow widget** with tabs | Turns the agent into a one-tap daily tool |
 | **Dedicated battery device with a status screen and buttons** | Works in a pocket; shows what it is doing; physical approve/stop |
 | **Safety built in**: blocked sensitive apps, approval before paying or sending | None of the existing projects have this |
-| **Frontier cloud AI with computer-use tools (Claude or Gemini) + Apple's on-device OCR** | Strong Hindi support and models built to operate screens; OCR gives exact text positions for accurate taps |
+| **Frontier cloud AI with computer-use tools (Claude or Gemini) + Apple's on-device OCR** | Models built to operate screens, with strong Hindi for later; OCR gives exact text positions for accurate taps |
 | **Shortcuts first, taps last** | Faster and more reliable than tapping every step _(idea)_ |
 
 ---
@@ -62,14 +67,16 @@ Mantiza's differences:
 | App sees the whole screen while other apps are in front | ✅ Doable on iOS 27 | ScreenCaptureKit is on iOS 27 and "replaces ReplayKit for screen streaming and mirroring" [P4]; the `screen-capture` background mode lets capture continue in the background [P5]; App Store Connect accepts that mode after an August 2026 fix (Apple staff) [P6] |
 | Board taps and types on the iPhone over Bluetooth, no cable | ✅ Doable (proven by others) | iPhone accepts Bluetooth pointer devices via AssistiveTouch [P7]; Bluetooth mouse + keyboard with an ESP32-S3 shown working, including exact positioning and the app talking to the board at the same time 📰 [P8][P2] |
 | App sends commands to the board while in the background | ✅ Doable | `bluetooth-central` background mode: "The app communicates with a Bluetooth accessory while in the background" [P5] |
-| Widget with tabs and one-tap workflows | ✅ Doable, with one limit | Widgets support `Button` and `Toggle` with App Intents, "without launching the app", and every tap reloads the widget [P9]. **Limit:** a workflow needs screen capture, so the tap must **open the Mantiza app** (via `Link`/`widgetURL`) [P9] ❓ (see 6.4) |
-| Hindi voice input | ✅ Doable | Apple lists **Dictation** for Hindi (India) [P10]; `SFSpeechRecognizer` lists `hi-IN` in sample output 📰 [P11]. Apple's newer `SpeechTranscriber` appears **not** to support Hindi 📰 [P12] |
-| Hindi understanding (chat and planning) | ✅ Doable with a cloud model | **Apple Intelligence does not support Hindi** in iOS 27 (16 languages listed, no Hindi) [P13]; Claude's Hindi score is 96.7% of English [P26]. The cloud model is our main brain (section 4.3) |
-| Typing Hindi into other apps | ⚠️ Doable in principle, must test | Paste approach: iOS treats **⌘V** as user intent, so no paste alert [P14]; key combos work over Bluetooth 📰 [P8]. Writing the clipboard from the background is ❓ |
+| Widget with tabs and one-tap workflows | ✅ Doable, with one limit | Widgets support `Button` and `Toggle` with App Intents, "without launching the app", and every tap reloads the widget [P9]. **Limit:** a workflow needs screen capture, so the tap must **open the Mantiza app** (via `Link`/`widgetURL`) [P9] ❓ (see 5.5) |
+| English voice, chat and typing (v1) | ✅ Doable | Apple speech recognition and Apple Intelligence support English [P13]; the device types English with keyboard key codes, as all existing projects do [P1][P2][P3] |
+| Fast tap decisions with Jev (v1) | ⚠️ Promising, must test (T11) | Jev answers "which option?" questions; repos report ~0.2–0.5 s per decision 📰 [P34][P36][P37]. Text-only input, so we feed it a numbered list built from OCR [P30] |
+| Hindi voice input (later) | ✅ Doable | Apple lists **Dictation** for Hindi (India) [P10]; `SFSpeechRecognizer` lists `hi-IN` in sample output 📰 [P11]. Apple's newer `SpeechTranscriber` appears **not** to support Hindi 📰 [P12] |
+| Hindi understanding (later) | ✅ Doable with a cloud model | **Apple Intelligence does not support Hindi** in iOS 27 (16 languages listed, no Hindi) [P13]; Claude's Hindi score is 96.7% of English [P26]. The cloud model is our main brain (section 4.3) |
+| Typing Hindi into other apps (later) | ⚠️ Doable in principle, must test | Paste approach: iOS treats **⌘V** as user intent, so no paste alert [P14]; key combos work over Bluetooth 📰 [P8]. Writing the clipboard from the background is ❓ |
 | Battery device with a screen | ✅ Doable with ready-made hardware | M5StickS3: ESP32-S3, 250 mAh battery, 1.14" screen, 2 buttons, IMU, mic, speaker [P15] |
 | Phone in pocket while Mantiza works | ❌ Not fully | Mantiza needs the phone **unlocked and on screen** during a task; protected content and some screens are not captured [P2][P16] |
 
-**Overall:** buildable. The riskiest parts to test first are **Hindi typing (paste)**, **capture behaviour in the background and on lock**, and **AI accuracy** (section 13).
+**Overall:** buildable. For the English-first version, the riskiest parts to test first are **capture behaviour in the background and on lock**, **AI accuracy and speed (Jev vs Claude/Gemini)**, and **pointer accuracy** (section 11, Phase 0).
 
 ---
 
@@ -78,15 +85,18 @@ Mantiza's differences:
 ```
                       ┌──────────────────────────────── iPhone ────────────────────────────────┐
  You (voice/text) ──► │ Mantiza app                                                          │
-                      │  ├─ Language layer: speech → text (Hindi/English), translate/clean   │
-                      │  ├─ Planner: "reply to Azad: मैं आ रहा हूँ" → steps                    │
+                      │  ├─ Language layer: speech → text (English in v1)                    │
+                      │  ├─ Planner (big brain): "reply to Azad: I'm coming" → subtask       │
                       │  ├─ Shortcut layer: app links / Shortcuts / Contacts (fast path)     │
-                      │  ├─ Eyes: ScreenCaptureKit frames + on-device OCR                    │
-                      │  ├─ Actor: AI picks next action (tap, swipe, type, paste, home)      │
+                      │  ├─ Eyes: ScreenCaptureKit frames + on-device OCR → numbered list    │
+                      │  ├─ Actor (fast brain): Jev picks an item from the list;             │
+                      │  │   big brain + screenshot for icons / unsure steps                 │
+                      │  ├─ Guards: freshness check, wait-for-settle, no blind retries       │
                       │  ├─ Safety: block list, approvals, stop                              │
                       │  └─ Memory: workflows, patterns ──► Widget (App Group storage)       │
                       │                                                                       │
-                      │        ▲ AI calls: Claude or Gemini (main) + Apple on-device OCR     │
+                      │   ▲ AI calls: Jev (fast picker) + Claude or Gemini (big brain)       │
+                      │     + Apple on-device OCR                                            │
                       └────────┼─────────────────────────────┬───────────────────────────────┘
                                │                              │ Bluetooth (our command channel)
                                │                              ▼
@@ -110,25 +120,34 @@ Mantiza's differences:
 | **Privacy** | What is stored, delete everything, choose AI provider |
 
 ### 4.2 The agent loop (per task)
-1. **Understand:** turn the request into a goal and slots (who, what, which app, language). Example: _"Azad ko reply karo ki mai aa rha hu in hindi"_ → `{app: Messages, contact: Azad, text: "मैं आ रहा हूँ", script: Devanagari}`.
-2. **Fast path first** _(idea)_: if an app link, Shortcut or Apple framework can do part of the job, use it (section 4.4).
+1. **Understand (big brain):** turn the request into a **subtask**: goal, literal inputs, how to check success, allowed risky actions, maximum steps (format idea from arc-cua [P36]). Example: _"Reply to Azad that I'm coming"_ → `{app: Messages, contact: Azad, text: "I'm coming", check: "message 'I'm coming' visible in Azad chat", allowed_risks: [send], max_steps: 8}`.
+2. **Fast path first** _(idea)_: if an app link, Shortcut or Apple framework can do part of the job, use it (section 4.5).
 3. **Start the eyes:** screen capture via the system picker (consent per session; whether it repeats every time is ❓).
-4. **Loop:** capture frame → OCR text with positions → AI chooses one action → send to device → device moves and clicks → next frame confirms the screen changed → repeat.
-5. **Safety gate before sensitive actions** (section 9).
-6. **Finish:** report result, save the run, update patterns, stop capture.
+4. **Loop** _(idea, pattern from [P34][P35][P36])_:
+   1. Capture the latest frame → OCR → build a **numbered list** of on-screen items with their boxes (e.g. `[1] "Azad"`, `[2] "Search"`, `[3] "iMessage"`).
+   2. **Jev** picks the operation and the item number. Risky items (Send, Delete, Buy) are **left out of the list** unless the subtask allows them.
+   3. If Jev's **confidence is low**, or the target is an **icon with no text**, ask the **big brain** with the screenshot instead.
+   4. **Freshness check:** just before tapping, confirm the item is still where we saw it; if the screen changed, look again instead of tapping.
+   5. Device moves the pointer to the **centre of the item's box** and clicks.
+   6. **Wait until the screen settles** (frames stop changing), not a fixed delay.
+   7. Repeat until the subtask's check passes.
+5. **Safety gate before sensitive actions** (section 9). **Never auto-retry** an action after an uncertain failure (e.g. Send) [P35].
+6. **Finish:** check success **independently** with OCR (a model saying "done" is not proof [P35][P36]); report, save the run, update patterns, stop capture.
 
 ### 4.3 AI layer
 
 **Decision (2026-10-29): a cloud model (Claude or Gemini) is the main brain. Apple's AI is a helper.**
+**Update (2026-10-30): two brains.** The cloud model is the **big brain**; **Jev** is the **fast brain** that picks most taps (section 4.3.1).
 
-Why:
-- **Hindi:** Apple Intelligence supports 16 languages and **Hindi is not one of them** [P13]. Claude scores **96.7%** of its English performance in Hindi (Claude Sonnet 4.5; 92.4% for Haiku 4.5) [P26].
+Why a cloud model rather than Apple's:
+- **Hindi (for later):** Apple Intelligence supports 16 languages and **Hindi is not one of them** [P13]. Claude scores **96.7%** of its English performance in Hindi (Claude Sonnet 4.5; 92.4% for Haiku 4.5) [P26].
 - **Operating screens:** Claude has a **computer use tool** (screenshots, clicks at coordinates, typing, key combinations, drag, scroll, zoom into small text) [P27]. Gemini has **computer use** with a **mobile mode** (tap, long press, drag at coordinates); it is a **Preview** feature and the mobile mode is **Android-optimised** [P28]. Apple's models have no equivalent tool.
 - **Model strength:** Apple's on-device context is **8,192 tokens** and PCC's is **32,000** [P17]; a review calls Apple's models "vastly behind the latest state of the AI frontier" 📰 [P29].
 
 | Model | Role | Facts |
 |---|---|---|
-| **Cloud model: Claude (Sonnet 5.5 or Haiku 5.5) or Gemini (3.8 Flash)** | **Main brain:** understand the request (any language), plan, choose each action, write Hindi text | Claude computer use supported on Claude 5.5 models [P27]; Gemini computer use models include `gemini-3.8-flash` (recommended) [P28]. Billed per token. We pick one after test T8 |
+| **Cloud model: Claude (Sonnet 5.5 or Haiku 5.5) or Gemini (3.8 Flash)** | **Big brain:** understand the request, plan the subtask, write message text, handle icon-only and low-confidence steps, final check |
+| **TypeSafe Jev (fast brain)** | Pick the next operation and item from the numbered OCR list | See 4.3.1 [P30][P31] | Claude computer use supported on Claude 5.5 models [P27]; Gemini computer use models include `gemini-3.8-flash` (recommended) [P28]. Billed per token. We pick one after test T8 |
 | **Apple OCR tool (on-device)** | Read all on-screen text **with positions** and send it to the cloud model alongside the screenshot, so taps land on exact targets | "the OCRTool allows the model to extract structured text from images" [P17]; free and private |
 | **Apple on-device model** _(optional)_ | Small English-only jobs (e.g. classify a simple command), offline/privacy mode | Accepts image input; 8,192-token context [P17] |
 | **Apple Private Cloud Compute** _(optional)_ | Possible cheaper English fallback | 32,000-token context; "no cloud API costs to developers who have less than 2 million first time downloads"; "No prompts are ever stored"; daily per-user limits [P17] |
@@ -137,9 +156,68 @@ All of these plug in through Apple's `LanguageModel` protocol ("Anthropic and Go
 
 **Trade-offs of cloud-first:** pay per token (reduce by sending downsized screenshots plus OCR text), screenshots leave the phone (clear consent, block list for sensitive apps), and it needs internet plus a small key server.
 
-**Keys and security:** never ship API keys in the app; Apple says to "Always fetch access tokens with a secure mechanism like OAuth, and store them securely using KeyChain" [P17]. We run a small backend that holds cloud keys.
+**Keys and security:** never ship API keys in the app; Apple says to "Always fetch access tokens with a secure mechanism like OAuth, and store them securely using KeyChain" [P17]. We run a small backend that holds cloud keys (Jev's key included).
 
-### 4.4 Fast path: "Shortcuts first, taps last" _(idea)_
+#### 4.3.1 The fast brain: TypeSafe Jev
+
+**What it is:** a "System One" decision model. You send a **state** (text or JSON) and typed **questions** (pick one option, give a score, yes/no), and it returns the answer with a **confidence** [P30]. It is **not** a chat model: "System One models do not write replies, produce code, or generate explanations" [P30].
+
+| Fact | Detail | Source |
+|---|---|---|
+| Speed | Not published by TypeSafe. Repos report a median of **178 ms** per request (browser) 📰 [P34], ~**270–320 ms** per decision (arc-cua) 📰 [P36], "~0.5 s per decision" for computer use 📰 [P37]. From India ❓ | 📰 |
+| Price | $0.042 per million input tokens; output free | [P31] |
+| Models | `jev-1.14.0` (from 2026-10-14), `jev-1.13.0`; `jev-latest` → 1.14. Context 64k tokens per request | [P31] |
+| Input | Text/JSON. Images only as an unfinished preview behind a special header ("Dreamer-ready") | [P30][P41] |
+| Language | "English is the primary training language and where accuracy is currently best"; other languages "handled but not equally well" | [P31] |
+| Known weaknesses | "leans toward the option that comes first"; "Accuracy falls as the state grows with content unrelated to the decision"; does not treat state as hostile by default | [P32] |
+| Privacy | Screen text goes to one more company. Zero data retention only for enterprise customers; "commitment not to train models on user data" | [P33] |
+
+**How we use it on iPhone:** existing Jev agents read a list of buttons from the accessibility tree (Android, macOS) or the web page [P34][P35][P36]. iOS does not let us read other apps' buttons, so we **build the list from OCR text and boxes**. Mitigations for its weaknesses: send only what is on screen (small state), shuffle or order the list by screen position, keep risky items out of the list, and use the confidence to fall back to the big brain.
+
+**Gap:** icon-only buttons (Send ➤, back ←, ⋮) have no text, so they are not in the OCR list. First runs use the big brain for these; learned workflows remember them (section 8). Icon detection is a later improvement _(idea)_.
+
+**If T11 fails:** we drop Jev and use the big brain for every step (slower; see section 4.4).
+
+### 4.4 Speed: how long a task takes _(estimates, not measured)_
+
+**Per step (one tap):**
+
+| Part | Big brain only | With Jev |
+|---|---|---|
+| Grab frame + OCR + build list (phone) | ~0.2–0.5 s | ~0.2–0.5 s |
+| Upload + AI decision | ~2–8 s | ~0.3–0.8 s |
+| Device moves pointer, checks, clicks | ~0.3–1.5 s | ~0.3–1.5 s |
+| Wait for screen to settle | ~0.5–1 s | ~0.5–1 s |
+| **Total per step** | **~4–10 s** | **~1.5–3.5 s** |
+
+**Whole task: "Reply to Azad: I'm coming":**
+
+| Stage | Big brain only | With Jev |
+|---|---|---|
+| User: speak, screen-capture picker, approve | ~6–12 s | ~6–12 s |
+| Understand + prepare (big brain, text only) | ~1–3 s | ~1–3 s |
+| Open Messages | ~1–2 s | ~1–2 s |
+| Tap Azad's chat | ~4–10 s | ~1–3 s |
+| Tap text box + type | ~4–9 s | ~1–3 s |
+| Tap Send (icon: big brain on first run) | ~1–2 s | ~2–6 s first run, ~1 s learned |
+| **Total, first run** | **~20–40 s** | **~13–28 s** |
+| **Total, learned workflow** | ~12–25 s | **~10–18 s** |
+
+**What the evidence says:**
+- Published phone agents on real apps take **7–30 s per step** (AndroidDaily: Gemini 3 Flash 14.7 s/step) [P39]; mobile-jev reports "about 21 seconds for 9 actions" on Android 📰 [P35].
+- Turning repeated steps into shortcuts cut task time **from 209 s to 91 s** in research (AppAgentX) [P40], which supports section 8.
+
+**Speed techniques we adopt** _(ideas; patterns seen in [P34]–[P36], our own code)_:
+1. Two brains (fast picker for most taps).
+2. Fast paths and learned workflows: skip steps entirely.
+3. Wait-for-settle instead of fixed waits (arc-cua cut waiting from ~1.3 s to 0.75 s on a task 📰 [P36]).
+4. Small state: only on-screen items, downsized frames.
+5. Independent checks with on-device OCR instead of another AI call.
+6. Absolute pointer positioning if T1 shows it works (skips pointer correction).
+
+The user's own time (~6–12 s) becomes the biggest share; reusing the screen-capture session (T4) is the next win.
+
+### 4.5 Fast path: "Shortcuts first, taps last" _(idea)_
 Before tapping, use direct routes where they exist:
 - **Contacts** (with permission) to find "Azad" and his number.
 - **App links** to open an app at the right screen.
@@ -148,7 +226,7 @@ Before tapping, use direct routes where they exist:
 
 This cuts the number of AI-driven steps, which makes tasks faster, cheaper and less error-prone _(estimate)_.
 
-### 4.5 Background and permissions
+### 4.6 Background and permissions
 | Need | How | Fact |
 |---|---|---|
 | Keep capturing while other apps are in front | `screen-capture` background mode | ✅ [P5][P6] |
@@ -157,7 +235,7 @@ This cuts the number of AI-driven steps, which makes tasks faster, cheaper and l
 | Live progress outside the app | Live Activity / Dynamic Island | ✅ (used by existing projects 📰 [P1]) |
 | Microphone, speech, contacts | Standard iOS permissions | ✅ |
 
-### 4.6 Known app limits
+### 4.7 Known app limits
 - The phone must stay **unlocked**; locking or revoking sharing pauses the task 📰 [P2].
 - **Protected video** is blacked out in captures [P16]; apps can detect capture (`sceneCaptureState`) and may hide content [P16].
 - **Landscape apps** are not supported by existing projects 📰 [P1][P2]; we start with portrait only.
@@ -210,13 +288,34 @@ Example (large widget):
 
 ---
 
-## 6. Part 3: multi-language (chat, voice, typing)
+## 6. Part 3: languages (English now, Hindi later)
 
-### 6.1 Chat (text)
+### 6.1 Version 1: English only
+| Area | How | Status |
+|---|---|---|
+| Chat | Typed English; the big brain understands it | ✅ |
+| Voice | Apple speech recognition (`SpeechTranscriber`) in English; check `supportedLocales` on device | ✅ English supported [P12] |
+| Fast picker | Jev is strongest in English [P31] | ⚠️ test T11 |
+| Typing into apps | The device types the text with keyboard key codes, as existing projects do [P1][P2][P3]. **Known issue:** capital letters and symbols may fail over Bluetooth on a combined mouse + keyboard 📰 (Fake Mouse doc, item 8). **Fallback:** clipboard + ⌘V paste (section 6.4, Method A) | ❓ test in T1 |
+| Device screen | English labels only; no special font needed | ✅ |
+
+**Walkthrough: "Mantiza, reply to Azad that I'm coming"** (times in section 4.4)
+1. **Start:** press A on the device, the widget, or the app; speak the request.
+2. **Understand (big brain):** subtask `{app: Messages, contact: Azad, text: "I'm coming", allowed_risks: [send]}`.
+3. **Fast path:** look up Azad in Contacts; exactly one match, otherwise ask.
+4. **Screen capture** starts (system picker).
+5. **Open Messages** (app link).
+6. OCR list shows `[n] "Azad"` → **Jev** picks it → freshness check → device taps.
+7. OCR list shows the message box → Jev picks it → device taps → device **types "I'm coming"** (or pastes, if typing fails).
+8. **Safety gate:** device screen shows "Send to Azad: I'm coming? A = Send · B = Cancel"; phone shows the same.
+9. On approve → Send is an icon, so the **big brain** finds it on the first run (learned after that) → device taps Send.
+10. **Check:** OCR confirms "I'm coming" appears in the chat → device shows "✓ Sent"; run saved as a learned workflow.
+
+### 6.2 Later: Hindi chat (text)
 - Users can type in Hindi (Devanagari), English or Hinglish (Hindi in Latin letters).
 - Apple Intelligence does **not** support Hindi [P13]; the **cloud model** (our main brain) handles Hindi and Hinglish, and also converts Hinglish to proper Hindi script when needed ("mai aa rha hu" → "मैं आ रहा हूँ").
 
-### 6.2 Voice
+### 6.3 Hindi voice (later)
 | Option | Hindi? | Notes |
 |---|---|---|
 | Apple `SpeechTranscriber` (newer API) | ❌ appears not supported 📰 [P12] | Check `supportedLocales` on device |
@@ -228,7 +327,7 @@ Example (large widget):
 
 **Wake word "Mantiza":** iOS does not let an app listen for a custom wake word while closed (Siri only). Users start Mantiza from the app, the widget, the device button, or Siri/Shortcuts. Note: Siri AI is English-first in iOS 27 [P13].
 
-### 6.3 Typing Hindi into other apps (the hard part)
+### 6.4 Typing Hindi into other apps (the hard part)
 The device types by sending **keyboard key codes**, not letters. All existing projects are English-only for this reason [P1][P2][P3]. Two ways around it:
 
 **Method A: copy and paste (recommended) _(idea)_**
@@ -251,8 +350,8 @@ Open questions:
 - Community reports describe Hindi **INSCRIPT** and **Devanagari QWERTY** layouts on iOS 📰 [P19]. The device would send INSCRIPT key codes and switch language with a key combo.
 - Downsides: user setup, layout names vary by iOS version 📰 [P19], harder for complex Hindi spelling.
 
-### 6.4 Walkthrough: "Mantiza, Azad ko reply karo ki mai aa rha hu in Hindi"
-1. **Voice → text:** Hindi/Hinglish speech recognised (section 6.2).
+### 6.5 Walkthrough (later): "Mantiza, Azad ko reply karo ki mai aa rha hu in Hindi"
+1. **Voice → text:** Hindi/Hinglish speech recognised (section 6.3).
 2. **Understand (cloud model):** reply to contact "Azad", in Messages, text "मैं आ रहा हूँ".
 3. **Fast path:** look up Azad in Contacts (permission); check there is exactly one match, otherwise ask.
 4. **Prepare:** write "मैं आ रहा हूँ" to the clipboard (expires in 2 minutes, local only), while Mantiza is still in front.
@@ -303,13 +402,13 @@ Facts from M5Stack's documentation [P15]:
 |---|---|
 | Idle | Mantiza logo, battery %, connected ✓, "Next: Order groceries? (A)" |
 | Running | App icon/name, "Step 3/7: Opening chat with Azad", progress bar |
-| Typing | "Pasting: मैं आ रहा हूँ" |
+| Typing | "Typing: I'm coming" |
 | Needs approval | "Send to Azad? A = Send · B = Cancel" (also on the phone) |
 | Done / Error | "✓ Sent" or "✗ Couldn't find Azad. Check phone" |
 | Pairing | Device name and a short pairing code |
 | Low battery | Battery warning and "Charge me" |
 
-**Note on Hindi on the device screen:** showing Devanagari needs a Hindi font in the firmware ❓ (font size and rendering on a 135 × 240 screen must be tested). Fallback: show English labels on the device and Hindi on the phone.
+**Note on Hindi on the device screen (later):** showing Devanagari needs a Hindi font in the firmware ❓ (font size and rendering on a 135 × 240 screen must be tested). Fallback: show English labels on the device and Hindi on the phone.
 
 ### 7.4 More ideas for the device _(ideas, to evaluate)_
 1. **Physical "run my next workflow" button:** on idle, press A to run the top suggestion from the widget's "Now" tab.
@@ -344,7 +443,11 @@ Facts from M5Stack's documentation [P15]:
 | **Always stoppable** | Stop in app, Dynamic Island, device button, or shake |
 | **Screen data** | Screenshots go to the cloud model only with clear consent (disclosed by name: Anthropic or Google); send downsized frames; never capture blocked apps; never store full video, only selected step images (deletable) |
 | **Clipboard** | Expiring, local-only items [P14] |
-| **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval |
+| **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval. Jev does not treat state as hostile by default [P32], so it only ever picks from our list |
+| **Risky items hidden from the picker** | Send, Delete, Buy, Pay, Post are left out of Jev's list unless the subtask allows them, and the app refuses such taps without approval _(idea, pattern from arc-cua [P36])_ |
+| **No blind retries** | Never repeat an action after an uncertain failure (e.g. Send), so nothing is sent or ordered twice _(pattern from mobile-jev [P35])_ |
+| **Literal text only** | The picker never invents text; message text comes only from the user's request via the big brain. Missing input → ask the user |
+| **AI providers disclosed** | Consent screen names every company that receives data: Anthropic or Google (screenshots), TypeSafe (on-screen text list) [P33] |
 | **Device security** | Bond only with the owner's phone; signed commands on our channel; reject commands when not bonded |
 
 ---
@@ -356,10 +459,11 @@ Facts from M5Stack's documentation [P15]:
 | iOS app | Swift 6, SwiftUI, iOS 27+ | ScreenCaptureKit on iPhone needs iOS 27 [P4] |
 | Screen capture | ScreenCaptureKit (`SCContentSharingPicker`, `SCStream`) | ✅ [P4] |
 | Bluetooth | Core Bluetooth (`bluetooth-central` background mode) | ✅ [P5] |
-| AI (main) | Claude (Sonnet 5.5 / Haiku 5.5) or Gemini (3.8 Flash), via Foundation Models' `LanguageModel` protocol | ✅ [P17][P27][P28] |
+| AI (big brain) | Claude (Sonnet 5.5 / Haiku 5.5) or Gemini (3.8 Flash), via Foundation Models' `LanguageModel` protocol | ✅ [P17][P27][P28] |
+| AI (fast brain) | TypeSafe Jev (`jev-latest` → `jev-1.14.0`) via its HTTPS API, called through our backend | [P31]; pending T11 |
 | AI (helpers) | Apple OCR tool; optional Apple on-device model / PCC for small English jobs | ✅ [P17] |
 | OCR | Foundation Models `OCRTool` / Vision framework | ✅ [P17] |
-| Speech | `SFSpeechRecognizer` (Hindi) + `SpeechTranscriber` (supported languages) + cloud fallback | 📰 [P11][P12] |
+| Speech | v1: `SpeechTranscriber` (English). Later: `SFSpeechRecognizer` (Hindi) + cloud fallback | 📰 [P11][P12] |
 | Widget | WidgetKit + App Intents (`Button(intent:)`, `Link`) | ✅ [P9] |
 | Live progress | ActivityKit (Live Activity, Dynamic Island) | ✅ |
 | Storage | SwiftData in an App Group (shared with the widget) | standard |
@@ -376,30 +480,38 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 ### Phase 0: Prove the risky parts (2 weeks)
 | # | Test | Pass condition |
 |---|---|---|
-| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; keys and ⌘V work |
+| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works |
 | T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background |
 | T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock |
 | T4 | Picker behaviour | Does it ask every task, or can a session be reused? |
-| T5 | **Hindi paste** | Clipboard written before switching apps; ⌘V pastes "मैं आ रहा हूँ" into Messages and WhatsApp |
-| T6 | Clipboard write from the background | Works or not (decides the design in 6.3) |
-| T7 | `SFSpeechRecognizer` `hi-IN` on device | Hindi and Hinglish recognised acceptably |
-| T8 | Claude vs Gemini (with Apple OCR text added) on 20 English + 10 Hindi tasks; Apple models as an optional comparison | Success rate, seconds per step, cost per task; pick the main model |
+| T8 | Claude vs Gemini (with Apple OCR text added) on 20 English tasks; Apple models as an optional comparison | Success rate, seconds per step, cost per task; pick the big brain |
 | T9 | Device battery life with Bluetooth + screen | Hours of use and standby |
-| T10 | Hindi font on the device screen | Readable Devanagari on 135 × 240 |
+| T11 | **Jev vs big brain** on ~20 real English app screens: Jev with the OCR-built list vs Claude/Gemini with the screenshot | Seconds per decision (measured from India), correct pick rate, how often icon-only buttons force a fallback. **Pass:** Jev about as accurate and clearly faster → keep two brains; otherwise big brain only |
+| T12 | **End-to-end timing** of the Azad task (section 4.4) | Real seconds for each stage, first run and learned run, logged per request |
 
 **Exit:** every test has a recorded result; design updated where something failed.
 
-### Phase 1: Core agent (6 weeks)
-- App: chat + voice, agent loop, OCR, fast path (Contacts, app links), safety gate, Live Activity.
+**Later (Hindi phase, not Phase 0):**
+
+| # | Test | Pass condition |
+|---|---|---|
+| T5 | **Hindi paste** | Clipboard written before switching apps; ⌘V pastes "मैं आ रहा हूँ" into Messages and WhatsApp |
+| T6 | Clipboard write from the background | Works or not (decides the design in 6.4) |
+| T7 | `SFSpeechRecognizer` `hi-IN` on device | Hindi and Hinglish recognised acceptably |
+| T10 | Hindi font on the device screen | Readable Devanagari on 135 × 240 |
+| T13 | Jev and big brain on Hindi / Hinglish screens | Accuracy close to English, or Hindi steps go to the big brain only |
+
+### Phase 1: Core agent, English (6 weeks)
+- App: English chat + voice, agent loop with two brains, OCR list, freshness check, wait-for-settle, fast path (Contacts, app links), safety gate, Live Activity.
 - Device firmware: Bluetooth mouse + keyboard, command channel, status screen, approve/cancel buttons, shake to stop.
-- **Exit:** 20 English tasks and 10 Hindi tasks (including the Azad example) succeed at least 80% of the time on our phones.
+- **Exit:** 30 English tasks (including "reply to Azad that I'm coming") succeed at least 80% of the time on our phones; median time per step recorded.
 
 ### Phase 2: Widget and learned workflows (4 weeks)
 - Save workflows, record-once replay, personalisation scores, widget in all sizes with tabs, device "run next workflow" button.
 - **Exit:** widget's "Now" tab shows a workflow the tester actually wanted at least half the time after 1 week of use _(target)_.
 
 ### Phase 3: Polish and private beta (4 weeks)
-- More languages (start with those cloud models handle well), push-to-talk on device (if T-tests allow), firmware updates over Bluetooth, battery tuning, privacy screen.
+- **Hindi** (sections 6.2–6.5, tests T5–T7, T10, T13), then more languages, push-to-talk on device (if T-tests allow), firmware updates over Bluetooth, battery tuning, privacy screen.
 - **Exit:** 10–20 trusted testers using it daily for 2 weeks.
 
 ### Phase 4: Own hardware and distribution decision (later)
@@ -411,7 +523,11 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Hindi paste does not work in some apps | Hindi typing fails there | Method B (Hindi hardware layout); show "paste failed" and ask the user |
+| Jev is not accurate enough on OCR-built lists, or slow from India | Speed gain lost | T11 decides; fall back to big brain only (section 4.3.1) |
+| Icon-only buttons (Send, back) are missing from the OCR list | More big-brain calls, slower first runs | Learned workflows remember them; icon detection later |
+| Jev is a young vendor (models from Sept–Oct 2026); speed figures are self-reported 📰 | Service changes or shuts down | Keep the picker behind our own interface so it can be swapped (e.g. a small fast cloud model) |
+| Capital letters / symbols fail when typing over Bluetooth 📰 | Wrong text typed | Test in T1; paste fallback |
+| (Later) Hindi paste does not work in some apps | Hindi typing fails there | Method B (Hindi hardware layout); show "paste failed" and ask the user |
 | Screen capture stops in the background or on lock | Tasks break | Keep phone awake during tasks; resume from the same step (as existing projects do 📰 [P1]) |
 | Chosen cloud model underperforms or changes | Lower success | Swap between Claude and Gemini through the same interface [P17] |
 | Cloud AI cost and privacy | Cost per task; screenshots leave the phone | Downsized frames + OCR text; record-once replay (section 8) to cut AI calls; clear consent; block list |
@@ -419,20 +535,21 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 | Taps land in the wrong place | Wrong actions | Absolute positioning, OCR targets, verify every step, approval before irreversible actions |
 | Battery life too short | Device dies mid-task | Screen sleep, deep sleep, larger battery in the custom device |
 | Other apps' terms of use | Accounts flagged for automation | Personal use first; avoid social media automation (one project reports shadow-bans 📰 [Fake Mouse doc]) |
-| Fast-moving competition | Others add similar features | Focus on our differences: languages, widget, safety, dedicated device |
+| Fast-moving competition | Others add similar features | Focus on our differences: speed (two brains), widget, safety, dedicated device, then languages |
 
 ---
 
 ## 13. Open questions for the team
 1. Who owns firmware (device) vs iOS app development?
-2. Which cloud model is the main brain: Claude or Gemini? (Test both in T8.)
-3. Which second language after Hindi?
-4. Do we buy 2–3 M5StickS3 units for Phase 0?
+2. Which cloud model is the big brain: Claude or Gemini? (Test both in T8.)
+3. Do we keep Jev as the fast brain? (Decided by T11.)
+4. When do we start Hindi, and which language comes after it?
+5. Do we buy 2–3 M5StickS3 units for Phase 0?
 
 ---
 
 ## 14. Legal note
-We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **reference**. One of them ([P3]) has **no license**, so we must not copy its code at all; the others are MIT, with a GPL-3.0 AirPlay part in the original that we do not need. _(Not legal advice.)_
+We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **reference**. One of them ([P3]) has **no license**, so we must not copy its code at all; the others are MIT, with a GPL-3.0 AirPlay part in the original that we do not need. The Jev-based projects ([P34]–[P38]) are all MIT and used only as reference for design patterns; using Jev itself means accepting TypeSafe's terms [P33]. _(Not legal advice.)_
 
 ---
 
@@ -469,3 +586,15 @@ We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **r
 | P27 | [Claude docs: Computer use tool](https://platform.claude.com/docs/en/agents-and-tools/tool-use/computer-use-tool) |
 | P28 | [Gemini API docs: Computer use](https://ai.google.dev/gemini-api/docs/computer-use) |
 | P29 | [MacStories: iOS and iPadOS 27 review](https://www.macstories.net/stories/ios-and-ipados-27-review/4/) |
+| P30 | [TypeSafe docs: System One (what Jev is and is not)](https://docs.typesafe.ai/concepts/system-one.md) |
+| P31 | [TypeSafe docs: Models (versions, price, context, languages)](https://docs.typesafe.ai/models.md) |
+| P32 | [TypeSafe docs: Jev 1.13 jaggedness (known weaknesses)](https://docs.typesafe.ai/model-jaggedness/jev-1.13.md) |
+| P33 | [TypeSafe docs: Legal (data retention, training)](https://docs.typesafe.ai/legal.md) |
+| P34 | [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) and its [performance notes](https://github.com/browser-use/jev-ultrafast/blob/main/docs/performance.md) |
+| P35 | [droidrun/mobile-jev (Android agent with Jev)](https://github.com/droidrun/mobile-jev) |
+| P36 | [shhivv/arc-cua](https://github.com/shhivv/arc-cua) and its [benchmarks](https://github.com/shhivv/arc-cua/blob/master/BENCHMARKS.md) |
+| P37 | [kerpopule/hermes-jev-skills](https://github.com/kerpopule/hermes-jev-skills) |
+| P38 | [wy-coliney/jev-browser-use](https://github.com/wy-coliney/jev-browser-use) |
+| P39 | [AndroidDaily: benchmark for mobile GUI agents on real apps (arXiv 2605.27761)](https://arxiv.org/html/2605.27761v1) |
+| P40 | [AppAgentX: evolving GUI agents (arXiv 2503.02268)](https://arxiv.org/html/2503.02268v3) |
+| P41 | [TypeSafe docs: Images (preview)](https://docs.typesafe.ai/images.md) |
