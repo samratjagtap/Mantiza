@@ -8,12 +8,12 @@ This repo currently holds the planning docs. Mantiza uses Google's [Artemis](htt
 
 | Topic | Mantiza | Artemis baseline |
 |---|---|---|
-| Plan: what it is and how it works | [plan.md](Mantiza%20Roadmap/plan.md) | [plan.md](Google%20Artemis%20Analysis/plan.md) |
-| Features and priorities | [features.md](Mantiza%20Roadmap/features.md) | [features.md](Google%20Artemis%20Analysis/features.md) |
-| Tech stack | [tech-stack.md](Mantiza%20Roadmap/tech-stack.md) | [tech-stack.md](Google%20Artemis%20Analysis/tech-stack.md) |
-| Roadmap and phases | [roadmap.md](Mantiza%20Roadmap/roadmap.md) | [roadmap.md](Google%20Artemis%20Analysis/roadmap.md) |
+| Plan: what it is and how it works | [plan.md](Docs/Mantiza%20Roadmap/plan.md) | [plan.md](Docs/Google%20Artemis%20Analysis/plan.md) |
+| Features and priorities | [features.md](Docs/Mantiza%20Roadmap/features.md) | [features.md](Docs/Google%20Artemis%20Analysis/features.md) |
+| Tech stack | [tech-stack.md](Docs/Mantiza%20Roadmap/tech-stack.md) | [tech-stack.md](Docs/Google%20Artemis%20Analysis/tech-stack.md) |
+| Roadmap and phases | [roadmap.md](Docs/Mantiza%20Roadmap/roadmap.md) | [roadmap.md](Docs/Google%20Artemis%20Analysis/roadmap.md) |
 
-New here? Start with the [Mantiza plan](Mantiza%20Roadmap/plan.md). Unfamiliar terms are explained in the [glossary](Mantiza%20Roadmap/glossary.md).
+New here? Start with the [Mantiza plan](Docs/Mantiza%20Roadmap/plan.md). Unfamiliar terms are explained in the [glossary](Docs/Mantiza%20Roadmap/glossary.md).
 
 ## Legend
 
