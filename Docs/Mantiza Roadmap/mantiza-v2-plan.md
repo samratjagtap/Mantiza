@@ -296,7 +296,7 @@ Example (large widget):
 | Chat | Typed English; the big brain understands it | ✅ |
 | Voice | Apple speech recognition (`SpeechTranscriber`) in English; check `supportedLocales` on device | ✅ English supported [P12] |
 | Fast picker | Jev is strongest in English [P31] | ⚠️ test T11 |
-| Typing into apps | The device types the text with keyboard key codes, as existing projects do [P1][P2][P3]. **Known issue:** capital letters and symbols may fail over Bluetooth on a combined mouse + keyboard 📰 (Fake Mouse doc, item 8). **Fallback:** clipboard + ⌘V paste (section 6.4, Method A) | ❓ test in T1 |
+| Typing into apps | The device types the text with keyboard key codes, as existing projects do [P1][P2][P3]. **Known issue:** capital letters and symbols may fail over Bluetooth on a combined mouse + keyboard 📰 (Fake Mouse doc, item 8). **Fallback:** clipboard + ⌘V paste (section 6.4, Method A) | ✅ Worked in T1 (2026-11-02) |
 | Device screen | English labels only; no special font needed | ✅ |
 
 **Walkthrough: "Mantiza, reply to Azad that I'm coming"** (times in section 4.4)
@@ -480,7 +480,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 ### Phase 0: Prove the risky parts (2 weeks)
 | # | Test | Pass condition |
 |---|---|---|
-| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works |
+| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works <br>**Result (2026-11-02): ✅ PASS.** All 8 tests worked, including capitals, symbols, ⌘V and ⌘H. Pointer repeatability and reconnection still to check ([results](../../firmware/t1-hid-test/README.md#results)) |
 | T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background |
 | T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock |
 | T4 | Picker behaviour | Does it ask every task, or can a session be reused? |

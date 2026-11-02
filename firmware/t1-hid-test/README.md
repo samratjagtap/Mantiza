@@ -73,22 +73,26 @@ Side button = next test, front button = run it. Fill the results table below as 
 
 ---
 
-## Results (fill this in)
-Date: ____ · iPhone model: ____ · iOS version: ____ · Tracking Speed: ____
+## Results
+Date: **2026-11-02** · iPhone model: ____ · iOS version: ____ · Tracking Speed: ____
+
+**Overall: PASS.** All 8 on-device tests worked as expected on the first run.
 
 | # | Test | Pass / Fail | Notes (what happened) |
 |---|---|---|---|
-| 1 | Corner reset | | |
-| 2 | Square 200 (back to start?) | | |
-| 3 | Click | | |
-| 4 | Long press | | |
-| 5 | Scroll | | |
-| 6 | Type text (capitals? symbols?) | | |
-| 7 | Paste ⌘V (no pop-up?) | | |
-| 8 | Home ⌘H | | |
-| – | `m 100 0` repeated: same distance each time? | | |
-| – | Reconnects after StickS3 restart without re-pairing? | | |
-| – | Reconnects after iPhone lock/unlock? | | |
+| 1 | Corner reset | ✅ Pass | |
+| 2 | Square 200 (back to start?) | ✅ Pass | |
+| 3 | Click | ✅ Pass | |
+| 4 | Long press | ✅ Pass | |
+| 5 | Scroll | ✅ Pass | |
+| 6 | Type text (capitals? symbols?) | ✅ Pass | Capitals and symbols typed correctly, so the known Bluetooth risk did not show up |
+| 7 | Paste ⌘V (no pop-up?) | ✅ Pass | |
+| 8 | Home ⌘H | ✅ Pass | Goes to the Home Screen |
+| – | `m 100 0` repeated: same distance each time? | Not tested yet | |
+| – | Reconnects after StickS3 restart without re-pairing? | Not tested yet | |
+| – | Reconnects after iPhone lock/unlock? | Not tested yet | |
+
+**Upload note (first flash):** the first upload failed with `Write timeout` because the StickS3 was still running its factory firmware (USB ID `303A:832B`), and the upload tool can't reset that into download mode. Fix: enter download mode by hand (Part B step 3). After that upload, the StickS3 **stayed in download mode** (blank screen) even after a USB reset, until it was **fully powered off and on**. Later uploads should work without the button, because this firmware uses the USB mode the upload tool can reset (`303A:1001`).
 
 ## Troubleshooting
 | Problem | Try |
@@ -98,6 +102,7 @@ Date: ____ · iPhone model: ____ · iOS version: ____ · Tracking Speed: ____
 | Connected, but no pointer | Check AssistiveTouch is **On** |
 | Wrong characters when typing | Check the hardware keyboard layout is **U.S.** (Part C step 4). If capitals or symbols still fail, **write it down**: this is a known Bluetooth risk we are testing |
 | Upload fails | Use download mode (Part B step 3); try another USB-C cable |
+| Blank screen after a successful upload | The StickS3 is still in download mode. Unplug USB, **power it fully off** (long-press the side button), then turn it on again |
 
 ## Not in this test (later)
 - Commands from the Mantiza iPhone app over Bluetooth (test **T2**).
