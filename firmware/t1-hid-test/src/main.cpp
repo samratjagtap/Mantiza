@@ -1,5 +1,7 @@
-// Mantiza Phase 0, test T1
+// Mantiza Phase 0, tests T1 and T1b
 // StickS3 acts as a Bluetooth LE mouse + keyboard for an iPhone (AssistiveTouch pointer).
+// T1b adds key combinations (Command+Space, Return, Tab, arrows), an experimental
+// Fn/Globe key and mouse buttons 4..8.
 //
 // Buttons:  KEY2 (side)  = select next test
 //           KEY1 (front) = run the selected test
@@ -8,6 +10,7 @@
 #include <M5Unified.h>
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
+#include <Preferences.h>
 
 static const char* DEVICE_NAME = "Mantiza T1";
 
@@ -16,6 +19,10 @@ static const char* DEVICE_NAME = "Mantiza T1";
 // ---------------------------------------------------------------------------
 static const uint8_t REPORT_ID_KEYBOARD = 1;
 static const uint8_t REPORT_ID_MOUSE    = 2;
+
+// Bump this whenever REPORT_MAP changes. The iPhone caches the report map of a
+// paired device, so a change needs a fresh pairing: old bonds are cleared on boot.
+static const uint32_t REPORT_MAP_VERSION = 2;
 
 static const uint8_t REPORT_MAP[] = {
   // Keyboard
@@ -39,6 +46,13 @@ static const uint8_t REPORT_MAP[] = {
   0x15, 0x00, 0x25, 0x65,
   0x05, 0x07, 0x19, 0x00, 0x29, 0x65,
   0x81, 0x00,       //   Input (Data, Array): 6 key codes
+  0x05, 0xFF,       //   Usage Page (Apple vendor "top case"), experimental
+  0x09, 0x03,       //   Usage (Fn / Globe key)
+  0x15, 0x00, 0x25, 0x01,
+  0x75, 0x01, 0x95, 0x01,
+  0x81, 0x02,       //   Input (Data, Var, Abs): Fn bit
+  0x75, 0x07, 0x95, 0x01,
+  0x81, 0x01,       //   Input (Const): Fn padding
   0xC0,             // End Collection
 
   // Mouse
@@ -48,12 +62,10 @@ static const uint8_t REPORT_MAP[] = {
   0x85, REPORT_ID_MOUSE,
   0x09, 0x01,       //   Usage (Pointer)
   0xA1, 0x00,       //   Collection (Physical)
-  0x05, 0x09, 0x19, 0x01, 0x29, 0x03,  // Buttons 1..3
+  0x05, 0x09, 0x19, 0x01, 0x29, 0x08,  // Buttons 1..8
   0x15, 0x00, 0x25, 0x01,
-  0x95, 0x03, 0x75, 0x01,
+  0x95, 0x08, 0x75, 0x01,
   0x81, 0x02,       //     Input (Data, Var, Abs): buttons
-  0x95, 0x01, 0x75, 0x05,
-  0x81, 0x01,       //     Input (Const): padding
   0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,  // X, Y, Wheel
   0x15, 0x81, 0x25, 0x7F,
   0x75, 0x08, 0x95, 0x03,
@@ -93,6 +105,15 @@ class ServerCallbacks : public NimBLEServerCallbacks {
 
 static void setupBluetooth() {
   NimBLEDevice::init(DEVICE_NAME);
+
+  Preferences prefs;
+  prefs.begin("mantiza", false);
+  if (prefs.getUInt("mapver", 0) != REPORT_MAP_VERSION) {
+    NimBLEDevice::deleteAllBonds();
+    prefs.putUInt("mapver", REPORT_MAP_VERSION);
+    Serial.println("[ble] report map changed: old pairings cleared, pair again");
+  }
+  prefs.end();
   // Bonding, no MITM ("Just Works"), LE Secure Connections
   NimBLEDevice::setSecurityAuth(true, false, true);
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
@@ -157,6 +178,13 @@ static void mouseLongPress(uint32_t ms) {
   sendMouse(0x00, 0, 0, 0);
 }
 
+// Clicks mouse button 1..8 (4 and up can be assigned to actions on the iPhone).
+static void mouseButtonClick(int button) {
+  sendMouse(1 << (button - 1), 0, 0, 0);
+  delay(50);
+  sendMouse(0x00, 0, 0, 0);
+}
+
 static void mouseScroll(int8_t amount) {
   sendMouse(mouseButtons, 0, 0, amount);
 }
@@ -169,16 +197,22 @@ static void cornerReset() {
 // ---------------------------------------------------------------------------
 // Keyboard (US layout; set the iPhone's hardware keyboard layout to U.S.)
 // ---------------------------------------------------------------------------
-static void sendKey(uint8_t modifiers, uint8_t keycode) {
+// Presses up to 6 keys together (plus modifiers and Fn), then releases them all.
+static void sendKeys(uint8_t modifiers, bool fn, const uint8_t* codes, int count, uint32_t holdMs = 0) {
   if (!connected) return;
-  uint8_t press[8]   = {modifiers, 0, keycode, 0, 0, 0, 0, 0};
-  uint8_t release[8] = {0};
+  uint8_t press[9]   = {modifiers, 0, 0, 0, 0, 0, 0, 0, (uint8_t)(fn ? 1 : 0)};
+  uint8_t release[9] = {0};
+  for (int i = 0; i < count && i < 6; i++) press[2 + i] = codes[i];
   keyboardInput->setValue(press, sizeof(press));
   keyboardInput->notify();
-  delay(REPORT_GAP_MS);
+  delay(REPORT_GAP_MS + holdMs);
   keyboardInput->setValue(release, sizeof(release));
   keyboardInput->notify();
   delay(REPORT_GAP_MS);
+}
+
+static void sendKey(uint8_t modifiers, uint8_t keycode) {
+  sendKeys(modifiers, false, &keycode, 1);
 }
 
 // Maps one ASCII character to a HID key code and modifier. Returns false if unsupported.
@@ -218,6 +252,48 @@ static void typeText(const char* text) {
 static void pasteCmdV()  { sendKey(MOD_LGUI, 0x19); }  // Command + V
 static void homeCmdH()   { sendKey(MOD_LGUI, 0x0B); }  // Command + H (experimental on iPhone)
 
+// HID key codes used by the T1b tests
+static const uint8_t KEY_ENTER = 0x28, KEY_ESC = 0x29, KEY_BACKSPACE = 0x2A, KEY_TAB = 0x2B,
+                     KEY_SPACE = 0x2C, KEY_RIGHT = 0x4F, KEY_LEFT = 0x50, KEY_DOWN = 0x51, KEY_UP = 0x52;
+
+// Sends a combination written like "cmd+space", "fn+h", "tab+h" or "ctrl+alt+shift+h".
+// Modifiers: cmd, ctrl, alt (opt), shift, fn (globe). Keys: a-z, 0-9, space, enter,
+// tab, esc, backspace, up, down, left, right. Returns false if a part is unknown.
+static bool sendCombo(String combo, uint32_t holdMs = 0) {
+  combo.toLowerCase();
+  combo += "+";
+  uint8_t mods = 0, codes[6];
+  int count = 0;
+  bool fn = false;
+  int start = 0;
+  for (int plus = combo.indexOf('+'); plus >= 0; start = plus + 1, plus = combo.indexOf('+', start)) {
+    String part = combo.substring(start, plus);
+    part.trim();
+    uint8_t code = 0, mod = 0;
+    if      (part == "cmd" || part == "gui")   mods |= MOD_LGUI;
+    else if (part == "ctrl")                   mods |= 0x01;
+    else if (part == "shift")                  mods |= MOD_LSHIFT;
+    else if (part == "alt" || part == "opt")   mods |= 0x04;
+    else if (part == "fn" || part == "globe")  fn = true;
+    else {
+      if      (part == "space")                         code = KEY_SPACE;
+      else if (part == "enter" || part == "return")     code = KEY_ENTER;
+      else if (part == "tab")                           code = KEY_TAB;
+      else if (part == "esc")                           code = KEY_ESC;
+      else if (part == "backspace" || part == "bksp")   code = KEY_BACKSPACE;
+      else if (part == "up")                            code = KEY_UP;
+      else if (part == "down")                          code = KEY_DOWN;
+      else if (part == "left")                          code = KEY_LEFT;
+      else if (part == "right")                         code = KEY_RIGHT;
+      else if (part.length() == 1 && asciiToKey(part.charAt(0), mod, code)) mods |= mod;
+      else { Serial.printf("[kbd] unknown key \"%s\"\n", part.c_str()); return false; }
+      if (count < 6) codes[count++] = code;
+    }
+  }
+  sendKeys(mods, fn, codes, count, holdMs);
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Tests (selected with KEY2, run with KEY1)
 // ---------------------------------------------------------------------------
@@ -234,7 +310,33 @@ static void testType()    { typeText(TYPE_TEST_TEXT); }
 static void testPaste()   { pasteCmdV(); }
 static void testHome()    { homeCmdH(); }
 
+// T1b: open an app through Search without touching its icon.
+static void testSearch() {
+  sendCombo("cmd+space");
+  delay(700);                 // wait for Search to open
+  typeText("Notes");
+  delay(500);                 // wait for results
+  sendKey(0, KEY_ENTER);
+}
+static void testReturn()  { typeText("Mantiza T1b test"); sendKey(0, KEY_ENTER); }
+static void testTab()     { sendKey(0, KEY_TAB); }
+static void testFnH()     { sendCombo("fn+h"); }
+static void testFnC()     { sendCombo("fn+c"); }
+static void testFnN()     { sendCombo("fn+n"); }
+static void testFnUp()    { sendCombo("fn+up"); }
+static void testButton4() { mouseButtonClick(4); }
+static void testButton5() { mouseButtonClick(5); }
+
 static const Test TESTS[] = {
+  {"b Search Notes",   testSearch},
+  {"b Type+Return",    testReturn},
+  {"b Tab (FKA)",      testTab},
+  {"b Fn+H Home",      testFnH},
+  {"b Fn+C Control",   testFnC},
+  {"b Fn+N Notific.",  testFnN},
+  {"b Fn+Up Switcher", testFnUp},
+  {"b Button 4",       testButton4},
+  {"b Button 5",       testButton5},
   {"Corner reset", testCorner},
   {"Square 200",   testSquare},
   {"Click",        testClick},
@@ -259,7 +361,7 @@ static void drawScreen() {
 
   d.setTextColor(TFT_CYAN, TFT_BLACK);
   d.setCursor(4, 4);
-  d.print("Mantiza T1");
+  d.print("Mantiza T1 + T1b");
 
   d.setCursor(4, 18);
   d.setTextColor(connected ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
@@ -268,8 +370,13 @@ static void drawScreen() {
   d.setCursor(90, 18);
   d.printf("%d%%", (int)M5.Power.getBatteryLevel());
 
-  for (int i = 0; i < TEST_COUNT; i++) {
-    int y = 40 + i * 18;
+  // The list is longer than the screen: show a window that follows the selection.
+  static const int VISIBLE = 9;
+  static int top = 0;
+  if (selectedTest < top) top = selectedTest;
+  if (selectedTest >= top + VISIBLE) top = selectedTest - VISIBLE + 1;
+  for (int i = top; i < TEST_COUNT && i < top + VISIBLE; i++) {
+    int y = 38 + (i - top) * 17;
     bool sel = (i == selectedTest);
     if (sel) d.fillRect(0, y - 3, 135, 16, TFT_DARKGREY);
     d.setTextColor(TFT_WHITE, sel ? TFT_DARKGREY : TFT_BLACK);
@@ -314,6 +421,9 @@ static void printHelp() {
     "  t <text>           type text\n"
     "  p                  paste (Command+V)\n"
     "  h                  Command+H (home?)\n"
+    "  k <combo>          key combination, e.g. k cmd+space, k enter, k tab+h, k fn+c\n"
+    "  K <ms> <combo>     same, but hold the keys for <ms> first\n"
+    "  b <1-8>            click mouse button 1..8\n"
     "  help               this list");
 }
 
@@ -340,6 +450,11 @@ static void handleCommand(String line) {
   else if (cmd == 't')                typeText(args.c_str());
   else if (cmd == 'p')                pasteCmdV();
   else if (cmd == 'h')                homeCmdH();
+  else if (cmd == 'k' && !args.isEmpty()) { if (!sendCombo(args)) return; }
+  else if (cmd == 'K' && sscanf(args.c_str(), "%d", &a) == 1 && args.indexOf(' ') > 0) {
+    if (!sendCombo(args.substring(args.indexOf(' ') + 1), a)) return;
+  }
+  else if (cmd == 'b' && sscanf(args.c_str(), "%d", &a) == 1 && a >= 1 && a <= 8) mouseButtonClick(a);
   else { Serial.println("unknown command, type: help"); return; }
 
   lastAction = line.substring(0, 21);
@@ -358,7 +473,7 @@ void setup() {
 
   setupBluetooth();
   drawScreen();
-  Serial.println("Mantiza T1 ready. Type: help");
+  Serial.println("Mantiza T1 + T1b ready. Type: help");
 }
 
 void loop() {
