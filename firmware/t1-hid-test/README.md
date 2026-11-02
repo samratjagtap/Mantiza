@@ -74,7 +74,7 @@ Side button = next test, front button = run it. Fill the results table below as 
 ---
 
 ## Results
-Date: **2026-11-02** · iPhone model: **iPhone 14 Plus** · iOS version: **27.2** · Tracking Speed: not recorded (left at default)
+Date: **2026-11-02** · iPhone model: **iPhone 14 Plus** · iOS version: **27.2** · Tracking Speed: **max** (slider all the way right; keep it there)
 
 **Overall: PASS.** All 8 on-device tests and all 3 extra checks worked as expected.
 
