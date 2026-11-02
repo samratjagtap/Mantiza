@@ -9,6 +9,8 @@ import UIKit
     let mock: MockBoard?
     let hands: Hands
     let calibrator = Calibrator()
+    /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
+    let screen: ScreenSource
     var onboarded: Bool {
         didSet { UserDefaults.standard.set(onboarded, forKey: "onboarded") }
     }
@@ -24,6 +26,11 @@ import UIKit
         let useMock = UserDefaults.standard.bool(forKey: "mockBoard")
         #endif
         mock = useMock ? MockBoard() : nil
+        #if targetEnvironment(simulator)
+        screen = StillScreen()
+        #else
+        screen = ScreenCaptureFeed()
+        #endif
         let channel = mock?.commands ?? link.commands
         hands = Hands(channel: channel, calibration: CalibrationStore.load(screen: Screen.size) ?? .identity)
         onboarded = UserDefaults.standard.bool(forKey: "onboarded")

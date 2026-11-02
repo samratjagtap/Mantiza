@@ -29,6 +29,7 @@ struct MainTabs: View {
     var body: some View {
         TabView {
             Tab("Device", systemImage: "cursorarrow.rays") { NavigationStack { DeviceView() } }
+            Tab("Look", systemImage: "eye") { NavigationStack { EyesView() } }
         }
     }
 }
