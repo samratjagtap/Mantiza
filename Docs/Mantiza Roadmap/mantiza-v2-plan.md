@@ -480,7 +480,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 ### Phase 0: Prove the risky parts (2 weeks)
 | # | Test | Pass condition |
 |---|---|---|
-| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works <br>**Result (2026-11-02): ✅ PASS.** All 8 tests worked, including capitals, symbols, ⌘V and ⌘H. Pointer repeatability and reconnection still to check ([results](../../firmware/t1-hid-test/README.md#results)) |
+| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works <br>**Result (2026-11-02): ✅ PASS.** All 8 tests worked on iPhone 14 Plus (iOS 27.2), including capitals, symbols, ⌘V and ⌘H. Pointer moves are repeatable, and it reconnects after a device restart and after iPhone lock/unlock ([results](../../firmware/t1-hid-test/README.md#results)) |
 | T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background |
 | T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock |
 | T4 | Picker behaviour | Does it ask every task, or can a session be reused? |

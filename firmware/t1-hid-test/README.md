@@ -74,9 +74,9 @@ Side button = next test, front button = run it. Fill the results table below as 
 ---
 
 ## Results
-Date: **2026-11-02** · iPhone model: ____ · iOS version: ____ · Tracking Speed: ____
+Date: **2026-11-02** · iPhone model: **iPhone 14 Plus** · iOS version: **27.2** · Tracking Speed: not recorded (left at default)
 
-**Overall: PASS.** All 8 on-device tests worked as expected on the first run.
+**Overall: PASS.** All 8 on-device tests and all 3 extra checks worked as expected.
 
 | # | Test | Pass / Fail | Notes (what happened) |
 |---|---|---|---|
@@ -88,9 +88,9 @@ Date: **2026-11-02** · iPhone model: ____ · iOS version: ____ · Tracking Spee
 | 6 | Type text (capitals? symbols?) | ✅ Pass | Capitals and symbols typed correctly, so the known Bluetooth risk did not show up |
 | 7 | Paste ⌘V (no pop-up?) | ✅ Pass | |
 | 8 | Home ⌘H | ✅ Pass | Goes to the Home Screen |
-| – | `m 100 0` repeated: same distance each time? | Not tested yet | |
-| – | Reconnects after StickS3 restart without re-pairing? | Not tested yet | |
-| – | Reconnects after iPhone lock/unlock? | Not tested yet | |
+| – | `m 100 0` repeated: same distance each time? | ✅ Pass | Moves the same distance each time, so the pointer is predictable |
+| – | Reconnects after StickS3 restart without re-pairing? | ✅ Pass | |
+| – | Reconnects after iPhone lock/unlock? | ✅ Pass | |
 
 **Upload note (first flash):** the first upload failed with `Write timeout` because the StickS3 was still running its factory firmware (USB ID `303A:832B`), and the upload tool can't reset that into download mode. Fix: enter download mode by hand (Part B step 3). After that upload, the StickS3 **stayed in download mode** (blank screen) even after a USB reset, until it was **fully powered off and on**. Later uploads should work without the button, because this firmware uses the USB mode the upload tool can reset (`303A:1001`).
 
