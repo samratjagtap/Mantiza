@@ -1,0 +1,17 @@
+{
+  "name": "home_settings",
+  "about": "Stick + Mac only (no app needed): go Home, open Settings by Spotlight, tap General, check it opened.",
+  "steps": [
+    {"hands": "home"},
+    {"sleep": 1},
+    {"hands": "key cmd+space"},
+    {"sleep": 0.8},
+    {"hands": "type Settings"},
+    {"sleep": 0.8},
+    {"hands": "key enter"},
+    {"screen_has": ["General"], "timeout": 8},
+    {"tap_text": "General"},
+    {"screen_has": ["About", "Software Update"], "timeout": 8},
+    {"hands": "home"}
+  ]
+}
