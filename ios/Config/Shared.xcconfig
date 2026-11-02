@@ -1,0 +1,18 @@
+// Signing: put your team in Config/Local.xcconfig (gitignored), e.g.
+//   DEVELOPMENT_TEAM = ABCDE12345
+// A free Apple ID (Personal Team) works; installs then expire after 7 days.
+
+// Bundle ID of the app; tests append ".tests". Must be unique to your Apple ID.
+MANTIZA_BUNDLE_ID = com.azadjagtap.mantiza
+
+// 1 = pair the stick with AccessorySetupKit (one system sheet). The app then sees only accessories set up
+// through that sheet, so it is a per-build choice. 0 = Core Bluetooth scan list (the known-working path).
+MANTIZA_ASK = 0
+
+// Entitlements file, empty by default so a Personal Team can always sign.
+MANTIZA_ENTITLEMENTS =
+
+MARKETING_VERSION = 0.1
+CURRENT_PROJECT_VERSION = 1
+
+#include? "Local.xcconfig"
