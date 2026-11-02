@@ -133,21 +133,23 @@ Full Keyboard Access lets you change its shortcuts. **Settings → Accessibility
 New serial commands: `k <combo>` (e.g. `k cmd+space`, `k enter`, `k tab+h`, `k fn+c`, `k ctrl+alt+h`), `K <ms> <combo>` (hold the keys for a while, e.g. while the iPhone is waiting for keys) and `b <1-8>` (mouse button). Type `help` for the full list.
 
 ### T1b results
-Date: ____ · iPhone 14 Plus · iOS 27.2
+Date: **2026-11-03** · iPhone 14 Plus · iOS 27.2
+
+**Overall: mostly PASS.** Search, Return, Tab and extra buttons work. The Fn/🌐 key from our device is **ignored** by the iPhone, so the default Full Keyboard Access shortcuts (Fn+H, Fn+C, Fn+N, Fn+↑) don't work. Next: remap them.
 
 | # | Test | Works? | Notes |
 |---|---|---|---|
-| 1 | ⌘+Space → type → Enter opens the app | | Time shown on device: |
-| 2 | Return sends in Messages | | |
-| 3 | Tab moves focus (Full Keyboard Access) | | |
-| 4 | Fn+H → Home | | |
-| 5 | Fn+C → Control Center | | |
-| 6 | Fn+N → Notification Center | | |
-| 7 | Fn+↑ → App Switcher | | |
-| 8 | Button 4 can be assigned + works | | Action: |
-| 9 | Button 5 can be assigned + works | | Action: |
-| – | Remapped command (e.g. `k ctrl+alt+h`) works | | |
-| – | T1 tests still work after the update | | |
+| 1 | ⌘+Space → type → Enter opens the app | ✅ | |
+| 2 | Return sends in Messages | ✅ | |
+| 3 | Tab moves focus (Full Keyboard Access) | ✅ | |
+| 4 | Fn+H → Home | ❌ | Nothing happens |
+| 5 | Fn+C → Control Center | ❌ | Nothing happens |
+| 6 | Fn+N → Notification Center | ❌ | Nothing happens |
+| 7 | Fn+↑ → App Switcher | ❌ | Nothing happens |
+| 8 | Button 4 can be assigned + works | ✅ | Action: |
+| 9 | Button 5 can be assigned + works | ✅ | Action: |
+| – | Remapped command (e.g. `k ctrl+alt+h`) works | Not tested yet | |
+| – | T1 tests still work after the update | ✅ | |
 
 ## Troubleshooting
 | Problem | Try |
