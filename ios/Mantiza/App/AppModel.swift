@@ -9,6 +9,7 @@ import UIKit
     let mock: MockBoard?
     let hands: Hands
     let calibrator = Calibrator()
+    let runner = AgentRunner()
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
     let screen: ScreenSource
     var onboarded: Bool {
@@ -60,6 +61,41 @@ import UIKit
     }
 
     func clearStop() { stopRequested = false }
+    func requestStop() { stopRequested = true }
+
+    /// Ask on the stick (A = yes, B = no); the phone may be showing another app.
+    func approve(_ question: String) async -> Bool {
+        Log.event("approval.ask", ["text": question])
+        let answer = (try? await channel.send(.ask(seconds: 60, text: question))) ?? "error"
+        Log.event("approval.answer", ["answer": answer])
+        return answer == "yes"
+    }
+
+    /// Plan and run a request end to end.
+    func run(_ request: String) async {
+        clearStop()
+        let deps: AgentRunner.Deps
+        do {
+            deps = AgentRunner.Deps(
+                hands: hands, screen: screen, big: try AISettings.bigBrain(), fast: AISettings.fastBrain(),
+                approve: { [weak self] q in await self?.approve(q) ?? false },
+                shouldStop: { [weak self] in self?.stopRequested ?? true },
+                openURL: { url in
+                    guard UIApplication.shared.applicationState == .active else { return false }
+                    return await UIApplication.shared.open(url)
+                })
+        } catch {
+            _ = await runner.run(request, deps: AgentRunner.Deps(
+                hands: hands, screen: screen, big: MissingBrain(message: error.localizedDescription), fast: nil,
+                approve: { _ in false }, shouldStop: { true }, openURL: { _ in false }))
+            return
+        }
+        let screen = self.screen
+        _ = await runner.run(request, deps: deps, prepare: {
+            if !screen.live { try await screen.start() }
+        })
+        try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
+    }
 
     /// Load the calibration saved for this screen size (call once a window exists).
     func reloadCalibration() {

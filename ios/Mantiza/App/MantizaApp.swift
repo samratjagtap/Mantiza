@@ -8,7 +8,10 @@ struct MantizaApp: App {
         WindowGroup {
             RootView()
                 .environment(app)
-                .onAppear { app.reloadCalibration() }
+                .onAppear {
+                    app.reloadCalibration()
+                    KeyStore.refreshRedaction()
+                }
         }
     }
 }
@@ -28,8 +31,10 @@ struct RootView: View {
 struct MainTabs: View {
     var body: some View {
         TabView {
+            Tab("Run", systemImage: "sparkles") { NavigationStack { RunView() } }
             Tab("Device", systemImage: "cursorarrow.rays") { NavigationStack { DeviceView() } }
             Tab("Look", systemImage: "eye") { NavigationStack { EyesView() } }
+            Tab("Settings", systemImage: "gearshape") { NavigationStack { SettingsView() } }
         }
     }
 }
