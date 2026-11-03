@@ -167,6 +167,7 @@ static void uiTask(void *) {
       }
     } else if (state == UI_RUN) {
       if (!both && !pairingHeld && (M5.BtnB.wasClicked() || M5.BtnB.wasHold())) requestStop();
+      if (!both && !pairingHeld && M5.BtnA.wasClicked()) pushEvent("a");  // the app pauses the task
     } else if (!both && !pairingHeld) {
       if (M5.BtnA.wasClicked()) pushEvent("a");
       if (M5.BtnB.wasHold()) requestStop();

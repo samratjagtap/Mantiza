@@ -15,7 +15,7 @@ struct MantizaWidgets: WidgetBundle {
 struct RunLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RunAttributes.self) { context in
-            LockScreenRun(goal: context.attributes.goal, state: context.state)
+            LockScreenRun(goal: context.attributes.goal, runID: context.attributes.runID, state: context.state)
                 .padding(14)
                 .activityBackgroundTint(Color.black.opacity(0.75))
                 .activitySystemActionForegroundColor(.white)
@@ -31,7 +31,7 @@ struct RunLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(s.result ?? s.question ?? s.action).font(.callout).lineLimit(2)
-                        RunButtons(state: s)
+                        RunButtons(state: s, runID: context.attributes.runID)
                     }
                 }
             } compactLeading: {
@@ -47,6 +47,7 @@ struct RunLiveActivity: Widget {
 
 struct LockScreenRun: View {
     let goal: String
+    let runID: String
     let state: RunAttributes.ContentState
 
     var body: some View {
@@ -62,7 +63,7 @@ struct LockScreenRun: View {
                 ProgressView(value: Double(min(state.step, state.total)), total: Double(state.total))
             }
             Text(state.result ?? state.question ?? state.action).font(.callout).lineLimit(2)
-            RunButtons(state: state)
+            RunButtons(state: state, runID: runID)
         }
         .foregroundStyle(.white)
     }
@@ -70,6 +71,7 @@ struct LockScreenRun: View {
 
 struct RunButtons: View {
     let state: RunAttributes.ContentState
+    let runID: String
 
     var body: some View {
         if state.result != nil {
@@ -80,7 +82,13 @@ struct RunButtons: View {
                 Button(intent: AnswerApprovalIntent(approve: true)) { Text("Approve") }.tint(.green)
             }
         } else {
-            Button(intent: StopRunIntent()) { Label("Stop", systemImage: "stop.fill") }.tint(.red)
+            HStack {
+                Button(intent: PauseRunIntent(runID: runID)) {
+                    Label(state.paused ? "Resume" : "Pause", systemImage: state.paused ? "play.fill" : "pause.fill")
+                }
+                .tint(.blue)
+                Button(intent: StopRunIntent(runID: runID)) { Label("Stop", systemImage: "stop.fill") }.tint(.red)
+            }
         }
     }
 }

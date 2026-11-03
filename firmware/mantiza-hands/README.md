@@ -41,7 +41,7 @@ USB serial is not checked, so the Mac harness keeps working. `unpair` also erase
 | Screen | A | B |
 |---|---|---|
 | Idle | click: event `a` (run next suggestion); hold: talk | click: event `b` (also cancels a heard request); hold 1 s: stop |
-| Working | hold: talk (answer a question) | click or hold: emergency stop |
+| Working | click: pause (again: go on); hold: talk (adds to the task, or answers a question) | click or hold: emergency stop |
 | Approve? (`ask`, `prompt`) | Yes | No |
 | Pair code | Confirm | Cancel |
 

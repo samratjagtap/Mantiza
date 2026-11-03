@@ -47,7 +47,12 @@ struct RunView: View {
                 if voice.listening { Text(voice.text.isEmpty ? "Listening…" : voice.text).foregroundStyle(.secondary) }
                 if !voice.error.isEmpty { Text(voice.error).font(.footnote).foregroundStyle(.red) }
                 if runner.running {
-                    Button("Stop", role: .destructive) { app.requestStop(); task?.cancel() }
+                    HStack {
+                        Button(app.paused ? "Resume" : "Pause") { app.togglePause() }
+                        Spacer()
+                        Button("Stop", role: .destructive) { app.requestStop(); task?.cancel() }
+                    }
+                    .buttonStyle(.borderless)
                 } else {
                     Button("Run") { start() }
                         .disabled(request.trimmingCharacters(in: .whitespaces).isEmpty || !app.inputReady)

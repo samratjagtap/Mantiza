@@ -7,11 +7,11 @@ import UserNotifications
     private var activity: Activity<RunAttributes>?
     private var state = RunAttributes.ContentState(step: 0, total: 0, action: "Starting")
 
-    func start(goal: String) {
+    func start(goal: String, runID: String) {
         end(nil)
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         state = .init(step: 0, total: 0, action: "Starting")
-        activity = try? Activity.request(attributes: RunAttributes(goal: String(goal.prefix(60))),
+        activity = try? Activity.request(attributes: RunAttributes(goal: String(goal.prefix(60)), runID: runID),
                                          content: .init(state: state, staleDate: nil))
     }
 
@@ -19,6 +19,19 @@ import UserNotifications
         state.step = step
         state.total = total
         state.action = action
+        push()
+    }
+
+    /// End activities a previous launch left behind (their run is gone; their buttons would do nothing).
+    static func endStale() {
+        for a in Activity<RunAttributes>.activities {
+            Task { await a.end(nil, dismissalPolicy: .immediate) }
+        }
+    }
+
+    func paused(_ on: Bool) {
+        state.paused = on
+        state.action = on ? "Paused. A on the stick or Resume to go on." : "Going on…"
         push()
     }
 

@@ -109,7 +109,7 @@ struct FlakyBrain: BigBrain, @unchecked Sendable {
         let plan = Subtask(goal: "Look", verification: ["x"], maxActions: 3)
         let brain = FlakyBrain(plan: plan, failures: 10) { _ in .done("seen") }
         let outcome = await AgentRunner().run(plan, deps: phone.deps(brain))
-        guard case .failed = outcome else { return XCTFail("\(outcome)") }
+        XCTAssertEqual(outcome, .blocked("The AI kept giving answers it could not use."))
         XCTAssertEqual(brain.count.n, AgentRunner.maxRejected + 1)
     }
 

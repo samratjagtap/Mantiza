@@ -54,6 +54,10 @@ import Observation
         var link: (() -> Recovery.Link)?
         /// A recovery stage to show (nil: live again).
         var onRecover: (Recovery.Stage?) -> Void = { _ in }
+        /// Stuck: ask the user to fix it by hand; true = they did, go on.
+        var askHelp: (String) async -> Bool = { _ in false }
+        /// The user paused the run (the agent waits between actions).
+        var paused: () -> Bool = { false }
         /// Ask the user a question (on the stick, answered by voice); nil when nobody answered.
         var askUser: (String) async -> String? = { _ in nil }
     }
@@ -72,7 +76,7 @@ import Observation
     /// Plan the request with the big brain, then run it.
     func run(_ request: String, deps: Deps, prepare: () async throws -> Void = {}) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []; training = []
+        steps = []; outcome = nil; history = []; training = []; amendments = []; amended = 0
         say("Planning")
         Log.event("run.start", ["request": request])
         do {
@@ -91,7 +95,7 @@ import Observation
     /// Run an already planned subtask (tests and replayed workflows).
     func run(_ plan: Subtask, deps: Deps) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []; training = []; subtask = plan
+        steps = []; outcome = nil; history = []; training = []; amendments = []; amended = 0; subtask = plan
         do { return finish(try await execute(plan)) } catch is CancellationError { return finish(.stopped) } catch {
             return finish(.failed(error.localizedDescription))
         }
@@ -101,7 +105,7 @@ import Observation
     /// the AI; when the screen does not match (or the check fails at the end), the normal AI loop takes over.
     func replay(_ w: Workflow, deps: Deps) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []; training = []; subtask = w.subtask
+        steps = []; outcome = nil; history = []; training = []; amendments = []; amended = 0; subtask = w.subtask
         say("Replaying \(w.name)")
         Log.event("run.start", ["request": w.request, "workflow": w.id.uuidString])
         do {
@@ -219,10 +223,40 @@ import Observation
         var noChange = 0, stale = 0, actions = 0
         var rejected = 0                // model answers that could not be used; each costs a fresh look
         var nudged = ""                 // the repeated action the model was already told to change
+        var helped = 0                  // times the user was asked to get the agent unstuck
+        /// Stuck: ask the user (at most `maxHelp` times) before giving up. nil = they helped, go on; else the end.
+        func stuck(_ reason: String) async -> Outcome? {
+            guard helped < Self.maxHelp else { return .blocked(reason) }
+            helped += 1
+            note("stuck (\(reason)); asked you", ms: 0)
+            say("Stuck: waiting for you")
+            guard await d.askHelp(reason) else { return .blocked(reason) }
+            history.append("the agent was stuck (\(reason)); the user fixed it by hand. Look again and go on from what the screen shows")
+            note("you helped; looking again", ms: 0)
+            noChange = 0; stale = 0; rejected = 0; nudged = ""; lastSignature = ""; before = nil
+            lastAction = Date()
+            return nil
+        }
         while actions < s.maxActions {
             do {
                 if d.shouldStop() { return .stopped }
                 try Task.checkCancellation()
+                if d.paused() {
+                    say("Paused")
+                    note("paused", ms: 0)
+                    while d.paused() {
+                        if d.shouldStop() { return .stopped }
+                        try await Task.sleep(for: .milliseconds(300))
+                    }
+                    history.append("the user paused and resumed; the screen may have changed. Look again, do not repeat the last action blindly")
+                    note("resumed; looking again", ms: 0)
+                    before = nil
+                    lastAction = Date()
+                }
+                for text in takeAmendments() {
+                    history.append("the user adds: \(text)")
+                    note("you added: \(text)", ms: 0)
+                }
                 let started = Date()
                 let frame = try await d.screen.settled(after: lastAction)
                 let captureMs = Self.ms(started)
@@ -230,7 +264,10 @@ import Observation
                     let changed = ScreenDiff.changed(previous.image, frame.image)
                     noChange = changed ? 0 : noChange + 1
                     history[history.count - 1] += changed ? " -> screen changed" : " -> no change"
-                    if noChange >= 3 { return .blocked("The screen stopped responding to taps.") }
+                    if noChange >= 3 {
+                        if let end = await stuck("The screen stopped responding to taps.") { return end }
+                        continue
+                    }
                     before = nil
                 }
                 let ocrStarted = Date()
@@ -247,7 +284,11 @@ import Observation
                 }
                 if decision == nil {
                     context.jpeg = frame.jpeg()
-                    do { decision = try await d.big.decide(context) } catch where Self.recoverable(error) && rejected < Self.maxRejected {
+                    do { decision = try await d.big.decide(context) } catch where Self.recoverable(error) {
+                        if rejected >= Self.maxRejected {
+                            if let end = await stuck("The AI kept giving answers it could not use.") { return end }
+                            continue
+                        }
                         rejected += 1
                         note("answer rejected (\(error.localizedDescription)); looking again", ms: Self.ms(decideStarted))
                         history.append("your previous answer was rejected: \(error.localizedDescription)")
@@ -290,7 +331,10 @@ import Observation
                     let signature = "tap \(label ?? String(format: "%.2f,%.2f", point.x, point.y)) on \(frame.id)"
                     if signature == lastSignature {
                         // Say it once, as a different choice may work; a second repeat ends the run (no blind retries).
-                        guard nudged != signature else { return .blocked("The same tap did not work twice; stopping instead of retrying.") }
+                        if nudged == signature {
+                            if let end = await stuck("The same tap did not work twice.") { return end }
+                            continue
+                        }
                         nudged = signature
                         note("\(decision.source) proposed the same tap again; asked for a different action", ms: thinkMs)
                         history.append("you proposed tap '\(label ?? "icon")' again but it did nothing; choose a different action")
@@ -313,13 +357,13 @@ import Observation
                         } else {
                             stale += 1
                             note("target “\(label)” moved; looking again", ms: thinkMs)
-                            if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
+                            if stale > 3 { if let end = await stuck("The screen keeps changing under the agent.") { return end } }
                             continue
                         }
                     } else if label == nil, try await !stillCurrent(frame, d) {  // an icon tap has no text to re-find
                         stale += 1
                         note("the screen moved while deciding; looking again", ms: thinkMs)
-                        if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
+                        if stale > 3 { if let end = await stuck("The screen keeps changing under the agent.") { return end } }
                         continue
                     }
                     let acted = Date()
@@ -342,7 +386,7 @@ import Observation
                     if try await !stillCurrent(frame, d) {  // the field may have lost focus
                         stale += 1
                         note("the screen moved while deciding; looking again", ms: thinkMs)
-                        if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
+                        if stale > 3 { if let end = await stuck("The screen keeps changing under the agent.") { return end } }
                         continue
                     }
                     let acted = Date()
@@ -413,6 +457,23 @@ import Observation
     }
 
     static let maxRejected = 3
+    static let maxHelp = 2
+    static let maxAmendments = 20
+
+    /// Instructions the user adds while the task runs (spoken to the stick); the loop reads them before each look.
+    @ObservationIgnored private var amendments: [String] = []
+    @ObservationIgnored private var amended = 0
+
+    func amend(_ text: String) {
+        guard running, amended < Self.maxAmendments else { return }
+        amended += 1
+        amendments.append(text)
+    }
+
+    private func takeAmendments() -> [String] {
+        defer { amendments = [] }
+        return amendments
+    }
     /// How recent the screen must be (a new frame or a "still" signal) before a positional action.
     static let freshness = 1.5
 

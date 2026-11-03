@@ -20,6 +20,10 @@ import UIKit
     let canvas = CanvasPublisher()
     /// Set while a run waits for a lost link to come back (RunRecovery).
     var recovering: Recovery.Stage?
+    /// The user paused the running task (A on the stick, or Pause on the Live Activity / Run tab).
+    private(set) var paused = false
+    /// The running task's id; Live Activity buttons from any other run are ignored.
+    private(set) var runID = ""
     /// The workflow shown as "Next" on the stick.
     private(set) var suggestion: Workflow?
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
@@ -69,7 +73,9 @@ import UIKit
             self.canvas.update { $0.phase = .working; $0.question = nil }
             if source != "stick" { Task { try? await self.channel.send(.unprompt(source == "phone" ? "Answered on phone" : "No answer")) } }
         }
-        RunControl.stop = { [weak self] in self?.requestStop() }
+        RunControl.stop = { [weak self] id in if id == self?.runID { self?.requestStop() } }
+        RunControl.pause = { [weak self] id in if id == self?.runID { self?.togglePause() } }
+        LiveRun.endStale()
         link.onLinkUp = { [weak self] in Task { await self?.suggestNext() } }
         RunControl.answer = { [weak self] yes in self?.approvals.resolve(yes, source: "phone") }
         link.onAudio = { [weak self] packet in
@@ -103,6 +109,10 @@ import UIKit
             approvals.resolve(false, source: "stick")
         case .yes: approvals.resolve(true, source: "stick")
         case .no, .timeout: approvals.resolve(false, source: "stick")
+        case .a where runner.running:
+            togglePause()
+        case .b where paused:
+            requestStop()
         case .a:
             // Run the suggestion. Screen sharing can only start with Mantiza in front.
             guard let w = suggestion else { break }
@@ -143,8 +153,13 @@ import UIKit
     /// A spoken request from the stick: run it if the phone can be operated, else say why on the stick.
     func requestFromStick(_ text: String) {
         let active = UIApplication.shared.applicationState == .active
+        if runner.running {  // said during a task: an extra instruction for it
+            runner.amend(text)
+            Log.event("run.amended", ["text": text])
+            Task { try? await channel.send(.ui(.info, text: "Got it:|" + text)) }
+            return
+        }
         let problem: String? =
-            runner.running ? "Still working on the last task.|B = stop it" :
             !UIApplication.shared.isProtectedDataAvailable ? "Unlock your iPhone,|then hold A again." :
             !screen.live && !active ? "Open Mantiza and tap|Start session." : nil
         if let problem {
@@ -158,7 +173,24 @@ import UIKit
         Task { await run(text) }
     }
 
-    func clearStop() { stopRequested = false }
+    func clearStop() { stopRequested = false; paused = false }
+
+    /// Pause between actions, or go on (the agent looks again first and never replays the last action).
+    func togglePause() {
+        guard runner.running else { return }
+        paused.toggle()
+        Log.event(paused ? "run.paused" : "run.resumed")
+        live.paused(paused)
+        canvas.update(now: true) {
+            $0.phase = self.paused ? .waiting : .working
+            $0.status = self.paused ? "Paused" : "Going on"
+        }
+        Task {
+            if paused { _ = try? await channel.send(.park) }
+            _ = try? await channel.send(paused ? .ui(.info, text: "Paused.|A = go on  B = stop|Hold A to add to the task")
+                                               : .ui(.run, text: "Going on"))
+        }
+    }
     func requestStop() { stopRequested = true }
 
     /// Ask on the stick (A = yes, B = no), the Live Activity and a notification; the first answer counts.
@@ -187,6 +219,10 @@ import UIKit
             findContacts: { await FastPath.findContacts($0) },
             link: { [weak self] in self?.recoveryLink() ?? Recovery.Link(stick: false, pointer: false, screen: false, frameAt: 0) },
             onRecover: { [weak self] stage in self?.recover(stage) },
+            askHelp: { [weak self] reason in
+                await self?.approve("Stuck: \(reason) Fix it by hand, then A = go on, B = stop.") ?? false
+            },
+            paused: { [weak self] in self?.paused ?? false },
             askUser: { [weak self] question in
                 guard let self else { return nil }
                 canvas.update(now: true) { $0.phase = .waiting; $0.question = question }
@@ -217,7 +253,8 @@ import UIKit
             return
         }
         let screen = self.screen
-        live.start(goal: workflow?.name ?? request)
+        runID = UUID().uuidString
+        live.start(goal: workflow?.name ?? request, runID: runID)
         // The stick takes a silent app during a task as a crash (firmware APP_SILENT_MS) and lets go of everything.
         let heartbeat = Task { [weak self] in
             while !Task.isCancelled {
