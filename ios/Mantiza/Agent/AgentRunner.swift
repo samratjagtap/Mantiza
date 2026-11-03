@@ -196,6 +196,7 @@ import Observation
         } else if let app = s.app {
             say("Opening \(app)")
             try await openApp(app)
+            history.append("opened \(app) (it may still be loading)")
         }
     }
 
@@ -343,9 +344,9 @@ import Observation
                 lastAction = acted
             case let .openApp(name):
                 let acted = Date()
-                try await openApp(name)
                 note("\(decision.source): open \(name)", ms: thinkMs, capture: captureMs, ocr: ocrMs, source: decision.source,
                      recorded: RecordedAction(kind: "open_app", text: name))
+                try await openApp(name)
                 history.append("opened \(name)")
                 lastAction = acted
             }
@@ -394,7 +395,7 @@ struct RecordedAction: Codable, Equatable {
 }
 
 @MainActor enum AppLauncher {
-    static let maxPages = 6
+    static let maxPages = 15
 
     /// Open an app: URL scheme when Mantiza is in front (instant), else find its icon label on the Home Screen
     /// pages. Spotlight is not used: iOS leaves it out of screen sharing, so its results cannot be read.
@@ -407,7 +408,7 @@ struct RecordedAction: Codable, Equatable {
         try await hands.home()
         try await Task.sleep(for: .milliseconds(500))
         try await hands.home()  // a second press goes to the first Home Screen page
-        var last: Frame?
+        var last: Set<String>?
         for page in 0..<maxPages {
             let frame = try await screen.settled(after: Date().addingTimeInterval(-0.1), quiet: 0.4, most: 2)
             let reading = try await OCR.read(frame)
@@ -417,13 +418,19 @@ struct RecordedAction: Codable, Equatable {
                 try await Task.sleep(for: .seconds(1))
                 return
             }
-            if let last, !ScreenDiff.changed(last.image, frame.image) { break }  // past the last page
-            last = frame
+            // Past the last page when the app names stop changing (pixels keep changing: clock widgets tick).
+            let names = pageNames(reading)
+            if let last, names == last { break }
+            last = names
             try await hands.swipe(from: CGPoint(x: 0.85, y: 0.5), to: CGPoint(x: 0.15, y: 0.5), steps: 20)
             try await Task.sleep(for: .milliseconds(400))
         }
         Log.event("launcher.miss", ["app": name])
         throw AIError("Could not find the \(name) app on the Home Screen.")
+    }
+
+    nonisolated static func pageNames(_ reading: ScreenReading) -> Set<String> {
+        Set(reading.elements.map { String($0.text.filter(\.isLetter)) }.filter { $0.count >= 3 })
     }
 
     /// An app icon's label: exact (case-insensitive) match, or a truncated label ("Google Ma...") that starts
@@ -456,6 +463,12 @@ enum AppLinks {
         "messages": "sms:", "maps": "maps:", "mail": "message:", "notes": "mobilenotes:", "calendar": "calshow:",
         "photos": "photos-redirect:", "music": "music:", "app store": "itms-apps:", "settings": "App-prefs:",
         "shortcuts": "shortcuts:", "whatsapp": "whatsapp:", "youtube": "youtube:",
+        // Third-party apps: opening fails (and the Home Screen search takes over) when the app is not installed.
+        "uber eats": "ubereats:", "uber": "uber:", "doordash": "doordash:", "instacart": "instacart:", "lyft": "lyft:",
+        "spotify": "spotify:", "instagram": "instagram:", "facebook": "fb:", "x": "twitter:", "slack": "slack:",
+        "gmail": "googlegmail:", "chrome": "googlechrome:", "google maps": "comgooglemaps:", "linkedin": "linkedin:",
+        "snapchat": "snapchat:", "venmo": "venmo:", "discord": "discord:", "reddit": "reddit:", "telegram": "tg:",
+        "zoom": "zoomus:",
     ]
 
     static func url(for app: String) -> URL? {

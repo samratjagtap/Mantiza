@@ -120,4 +120,21 @@ final class SpotlightTests: XCTestCase {
         XCTAssertLessThan(AppLauncher.iconHit("notes", in: r)!.center.y, 0.5)
         XCTAssertNil(AppLauncher.iconHit("Go", in: r))
     }
+
+    func testLastPageIsFoundByAppNamesNotClockPixels() {
+        func page(_ texts: [String]) -> ScreenReading {
+            ScreenReading(frameID: 1, elements: texts.enumerated().map {
+                ScreenElement(id: $0.offset + 1, text: $0.element, box: CGRect(x: 0.1, y: 0.1 * Double($0.offset), width: 0.1, height: 0.02))
+            })
+        }
+        // The same page a few seconds later: the time and clock numbers differ, the app names do not.
+        XCTAssertEqual(AppLauncher.pageNames(page(["11:03", "10", "Weather", "Find My", "Q Search"])),
+                       AppLauncher.pageNames(page(["11:04", "12", "Weather", "Find My", "Q Search"])))
+        XCTAssertNotEqual(AppLauncher.pageNames(page(["Weather", "Notes"])), AppLauncher.pageNames(page(["Spotify", "Notes"])))
+    }
+
+    func testThirdPartyAppLinks() {
+        XCTAssertEqual(AppLinks.url(for: "Uber Eats")?.absoluteString, "ubereats:")
+        XCTAssertNil(AppLinks.url(for: "Some Unknown App"))
+    }
 }

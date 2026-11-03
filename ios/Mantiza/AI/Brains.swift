@@ -106,7 +106,7 @@ enum Prompts {
     - tap: give "element" (a number from the list) when the target has text; otherwise give "x" and "y" in thousandths for an icon.
     - type: type "text" into the focused field. Only type text that is in the task's inputs, exactly. Tap the field first.
     - scroll_down / scroll_up: reveal more of the page.
-    - back: go back one screen. home: go to the Home Screen. open_app: open the app named in "text".
+    - back: go back one screen. home: go to the Home Screen. open_app: open the app named in "text", only if it is not open yet (see the recent actions); if it is still loading, choose wait.
     - wait: the screen is still loading.
     - done: the task's checks are visible on screen now. Put the evidence in "reason".
     - blocked: you cannot continue safely (a login, a payment, a PIN, a captcha, or the same action failed before). Explain in "reason".
