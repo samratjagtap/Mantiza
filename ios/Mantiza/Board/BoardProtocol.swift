@@ -10,7 +10,10 @@ enum BoardUUID {
     static let cmd = make("0601")
     static let reply = make("0602")
     static let status = make("0603")
+    /// Push-to-talk packets (firmware 0.4.0); older sticks lack it.
+    static let audio = make("0604")
     static let all = [cmd, reply, status]
+    static let discover = all + [audio]
 }
 
 /// The JSON the board notifies on `status` every second (and answers to `status`).
@@ -57,7 +60,7 @@ enum BoardLine: Equatable {
 
     static func parse(_ line: String) -> BoardLine? {
         let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.hasPrefix("evt ") { return BoardEvent(rawValue: String(text.dropFirst(4))).map { .event($0) } }
+        if text.hasPrefix("evt ") { return BoardEvent(String(text.dropFirst(4))).map { .event($0) } }
         return BoardReply.parse(text).map { .reply($0) }
     }
 }
@@ -76,12 +79,50 @@ struct BoardReply: Equatable {
 }
 
 /// Buttons and the shake sensor on the stick.
-enum BoardEvent: String, Equatable {
+enum BoardEvent: Equatable {
     case a          // button A on the idle screen: run the suggested workflow
     case b          // button B on the idle screen
     case stop       // B held, or shaken while working: emergency stop
     case pairing    // pairing window opened on the stick
     case yes, no, timeout  // answer to a `prompt`
+    case talkStart(UInt32)            // A held: recording utterance N, packets follow on `audio`
+    case talkEnd(UInt32, packets: Int)
+    case talkShort(UInt32)            // let go too soon to be speech
+
+    init?(_ text: String) {
+        let parts = text.split(separator: " ").map(String.init)
+        let utt = parts.count > 1 ? UInt32(parts[1]) : nil
+        switch parts.first {
+        case "a": self = .a
+        case "b": self = .b
+        case "stop": self = .stop
+        case "pairing": self = .pairing
+        case "yes": self = .yes
+        case "no": self = .no
+        case "timeout": self = .timeout
+        case "talk_start": guard let utt else { return nil }; self = .talkStart(utt)
+        case "talk_short": guard let utt else { return nil }; self = .talkShort(utt)
+        case "talk_end":
+            guard let utt, parts.count > 2, let n = Int(parts[2]) else { return nil }
+            self = .talkEnd(utt, packets: n)
+        default: return nil
+        }
+    }
+
+    var name: String {
+        switch self {
+        case .a: return "a"
+        case .b: return "b"
+        case .stop: return "stop"
+        case .pairing: return "pairing"
+        case .yes: return "yes"
+        case .no: return "no"
+        case .timeout: return "timeout"
+        case let .talkStart(u): return "talk_start \(u)"
+        case let .talkEnd(u, n): return "talk_end \(u) \(n)"
+        case let .talkShort(u): return "talk_short \(u)"
+        }
+    }
 }
 
 /// Commands in the firmware's vocabulary (mantiza-hands.ino). Pointer positions are 0...32767 per axis.
@@ -106,6 +147,8 @@ enum BoardCommand {
     case hello
     case auth(String)
     case secret(String)
+    /// Send packet SEQ of utterance UTT on `audio` again.
+    case audio(utterance: UInt32, seq: Int)
 
     enum UiState: String { case idle, run, done, error, info }
 
@@ -134,6 +177,7 @@ enum BoardCommand {
         case .hello: return "hello"
         case let .auth(mac): return "auth \(mac)"
         case let .secret(hex): return "secret \(hex)"
+        case let .audio(u, seq): return "audio \(u) \(seq)"
         case .pair: return "pair"
         case .unpair: return "unpair"
         }

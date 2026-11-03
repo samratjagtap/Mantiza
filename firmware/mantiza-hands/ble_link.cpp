@@ -24,7 +24,7 @@ const int MBUF_DATA = MYNEWT_VAL(MSYS_1_BLOCK_SIZE) - 16;  // payload per block 
 // Up to MAX_PEERS centrals at once: the phone's app, plus a Mac as a debug harness.
 const int MAX_PEERS = 2;
 
-enum { CH_REPLY, CH_STATUS, CH_MOUSE, CH_KEYBOARD, CH_CONSUMER, CH_COUNT };
+enum { CH_REPLY, CH_STATUS, CH_AUDIO, CH_MOUSE, CH_KEYBOARD, CH_CONSUMER, CH_COUNT };
 
 struct Text {
   uint16_t len;
@@ -317,6 +317,7 @@ void ble_begin(const String &name) {
   NimBLECharacteristic *cmd = svc->createCharacteristic(UUID("0601"), NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC);
   chars[CH_REPLY] = svc->createCharacteristic(UUID("0602"), NIMBLE_PROPERTY::NOTIFY);
   chars[CH_STATUS] = svc->createCharacteristic(UUID("0603"), NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC);
+  chars[CH_AUDIO] = svc->createCharacteristic(UUID("0604"), NIMBLE_PROPERTY::NOTIFY);  // encrypted packets, audio.h
   hidDevice = new NimBLEHIDDevice(server);
   auto *hid = hidDevice;
   hid->setReportMap(const_cast<uint8_t *>(hid_report_map), hid_report_map_size);
@@ -383,6 +384,11 @@ void ble_status(const String &json) {
   if (!statusDirty) ctrlPending++;
   statusDirty = true;
   xSemaphoreGive(statusLock);
+}
+
+bool ble_audio(const uint8_t *p, size_t n) {
+  if (n > (size_t)ble_mtu() - 3) return false;
+  return notifyRaw(CH_AUDIO, p, n, 300);
 }
 
 uint32_t ble_reply_drops() { return replyDrops; }

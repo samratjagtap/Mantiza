@@ -1,10 +1,14 @@
 #include "ui.h"
 #include <M5Unified.h>
 #include <esp_task_wdt.h>
+#include "audio.h"
 #include "ble_link.h"
 
 const uint32_t SCREEN_OFF_MS = 15000;   // idle screen only
 const uint32_t PAIRING_WINDOW_MS = 120000;
+const uint32_t TALK_HOLD_MS = 300;      // A held this long starts push-to-talk
+const uint32_t PAIR_HOLD_MS = 3000;     // A and B held together this long open pairing
+const size_t EVENT_LEN = 24;
 const float SHAKE_G = 2.2f;             // acceleration magnitude that counts as a shake peak
 const int SHAKE_PEAKS = 3;              // peaks within SHAKE_WINDOW_MS
 const uint32_t SHAKE_WINDOW_MS = 800;
@@ -27,7 +31,7 @@ static uint32_t lastActivity;
 static bool screenOn = true;
 
 static void pushEvent(const char *e) {
-  char buf[12] = {0};
+  char buf[EVENT_LEN] = {0};
   strncpy(buf, e, sizeof buf - 1);
   xQueueSend(events, buf, 0);
 }
@@ -44,6 +48,8 @@ static void requestStop() {
   beep(400, 300);
 }
 
+void ui_event(const char *e) { pushEvent(e); }
+
 static uint16_t headerColor(UiState s) {
   switch (s) {
     case UI_RUN: return TFT_BLUE;
@@ -58,18 +64,20 @@ static void draw() {
   xSemaphoreTake(lock, portMAX_DELAY);
   UiState s = state;
   String text = screenText, next = nextText;
+  bool listening = audio_recording();
   int step = progStep, total = progTotal;
   xSemaphoreGive(lock);
 
   auto &d = M5.Display;
   d.startWrite();
   d.fillScreen(TFT_BLACK);
-  d.fillRect(0, 0, d.width(), 22, headerColor(s));
-  d.setTextColor(TFT_WHITE, headerColor(s));
+  uint16_t header = listening ? TFT_PURPLE : headerColor(s);
+  d.fillRect(0, 0, d.width(), 22, header);
+  d.setTextColor(TFT_WHITE, header);
   d.setTextSize(1);
   d.setFont(&fonts::FreeSansBold9pt7b);
   d.setCursor(4, 3);
-  const char *title = s == UI_RUN ? "Working" : s == UI_ASK ? "Approve?" : s == UI_DONE ? "Done" : s == UI_ERROR ? "Problem" : "Mantiza";
+  const char *title = listening ? "Listening" : s == UI_RUN ? "Working" : s == UI_ASK ? "Approve?" : s == UI_DONE ? "Done" : s == UI_ERROR ? "Problem" : "Mantiza";
   d.print(title);
   char right[24];
   int b = battery;
@@ -80,7 +88,14 @@ static void draw() {
   d.setTextColor(TFT_WHITE, TFT_BLACK);
   d.setFont(&fonts::FreeSans9pt7b);
   d.setCursor(4, 30);
-  if (s == UI_IDLE) {
+  if (listening) {
+    d.println("Speak now.");
+    d.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    d.println("Let go of A when done.");
+    int w = d.width() - 8;
+    d.drawRect(4, d.height() - 18, w, 12, TFT_WHITE);
+    d.fillRect(5, d.height() - 17, (w - 2) * audio_level() / 100, 10, TFT_MAGENTA);
+  } else if (s == UI_IDLE) {
     bool linked = ble_connected();
     const char *hid = ble_hid_state();
     d.setTextColor(linked ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
@@ -91,17 +106,18 @@ static void draw() {
     if (ble_pairing_open()) d.println("Pairing open");
     else if (next.length()) d.println("A: " + next);
     else d.println(deviceName);
+    if (linked) { d.setTextColor(TFT_CYAN, TFT_BLACK); d.println("Hold A to talk"); }
   } else {
     String t = text;
     t.replace("|", "\n");
     d.println(t);
   }
-  if (s == UI_RUN && total > 0) {
+  if (!listening && s == UI_RUN && total > 0) {
     int w = d.width() - 8;
     d.drawRect(4, d.height() - 14, w, 10, TFT_WHITE);
     d.fillRect(5, d.height() - 13, (w - 2) * min(step, total) / total, 8, TFT_CYAN);
   }
-  if (s == UI_ASK) {
+  if (!listening && s == UI_ASK) {
     d.setTextColor(TFT_YELLOW, TFT_BLACK);
     d.setCursor(4, d.height() - 18);
     d.print("A = Yes      B = No");
@@ -117,11 +133,28 @@ static void wakeScreen() {
 static void uiTask(void *) {
   uint32_t peaks[SHAKE_PEAKS] = {0};
   int peak = 0;
-  uint32_t lastBattery = 0, lastIdleRedraw = 0;
+  uint32_t lastBattery = 0, lastIdleRedraw = 0, lastLevelDraw = 0;
+  bool pairingHeld = false;
   for (;;) {
     M5.update();
     bool pressed = M5.BtnA.wasPressed() || M5.BtnB.wasPressed();
     if (pressed) wakeScreen();
+
+    bool both = M5.BtnA.isPressed() && M5.BtnB.isPressed();
+    if (both && M5.BtnA.pressedFor(PAIR_HOLD_MS) && M5.BtnB.pressedFor(PAIR_HOLD_MS) && !pairingHeld) {
+      pairingHeld = true;
+      audio_stop();
+      ble_open_pairing(PAIRING_WINDOW_MS);
+      pushEvent("pairing");
+      beep(1500, 120);
+      dirty = true;
+    }
+    if (!M5.BtnA.isPressed() && !M5.BtnB.isPressed()) pairingHeld = false;
+
+    // Push-to-talk: hold A anywhere except an approval question (there A is "yes").
+    if (state != UI_ASK && !both && !pairingHeld && M5.BtnA.wasHold()) { audio_start(); wakeScreen(); dirty = true; }
+    if (audio_recording() && !M5.BtnA.isPressed()) { audio_stop(); dirty = true; }
+    if (audio_recording() && millis() - lastLevelDraw > 100) { lastLevelDraw = millis(); dirty = true; }
 
     if (state == UI_ASK) {
       if (M5.BtnA.wasClicked()) { askAnswer = 1; beep(2000, 60); }
@@ -133,16 +166,9 @@ static void uiTask(void *) {
         ui_show(promptBefore, answer == 1 ? "Approved" : answer == 0 ? "Cancelled" : "No answer");
       }
     } else if (state == UI_RUN) {
-      if (M5.BtnB.wasClicked() || M5.BtnB.wasHold()) requestStop();
-    } else {
-      if (M5.BtnA.wasHold()) {
-        ble_open_pairing(PAIRING_WINDOW_MS);
-        pushEvent("pairing");
-        beep(1500, 120);
-        dirty = true;
-      } else if (M5.BtnA.wasClicked()) {
-        pushEvent("a");
-      }
+      if (!both && !pairingHeld && (M5.BtnB.wasClicked() || M5.BtnB.wasHold())) requestStop();
+    } else if (!both && !pairingHeld) {
+      if (M5.BtnA.wasClicked()) pushEvent("a");
       if (M5.BtnB.wasHold()) requestStop();
       else if (M5.BtnB.wasClicked()) pushEvent("b");
     }
@@ -186,11 +212,11 @@ static void uiTask(void *) {
 
 void ui_begin(const String &name) {
   lock = xSemaphoreCreateMutex();
-  events = xQueueCreate(8, 12);
+  events = xQueueCreate(8, EVENT_LEN);
   deviceName = name;
   M5.Display.setRotation(1);
   M5.Display.setBrightness(128);
-  M5.BtnA.setHoldThresh(3000);  // A held 3 s opens pairing
+  M5.BtnA.setHoldThresh(TALK_HOLD_MS);  // A held: push-to-talk (A + B held 3 s: pairing)
   M5.BtnB.setHoldThresh(1000);  // B held 1 s is an emergency stop
   lastActivity = millis();
   xTaskCreatePinnedToCore(uiTask, "ui", 6144, NULL, 1, NULL, 1);
@@ -253,7 +279,7 @@ void ui_clear_stop() { stopLatched = false; }
 uint32_t ui_stop_count() { return stopCount; }
 
 bool ui_pop_event(String &event) {
-  char buf[12];
+  char buf[EVENT_LEN];
   if (xQueueReceive(events, buf, 0) != pdTRUE) return false;
   event = buf;
   return true;

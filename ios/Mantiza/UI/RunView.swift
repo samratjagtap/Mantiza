@@ -12,6 +12,23 @@ struct RunView: View {
         let runner = app.runner
         List {
             Section {
+                if app.sessionLive {
+                    Label("Session on. Hold A on the stick and talk.", systemImage: "waveform")
+                    Button("End session", role: .destructive) { Task { await app.stopSession() } }
+                } else {
+                    Button { Task { await app.startSession() } } label: {
+                        Label("Start session", systemImage: "play.circle.fill")
+                    }
+                    .disabled(!app.inputReady)
+                }
+                if app.talk.transcribing { Label("Listening to the stick…", systemImage: "ear") }
+                else if !app.talk.lastHeard.isEmpty { LabeledContent("Heard", value: app.talk.lastHeard) }
+            } header: {
+                Text("Talk to the stick")
+            } footer: {
+                Text("Start once: Mantiza shares the screen, then hold A on the stick from anywhere and say what to do. The session ends when the iPhone locks or you end it.")
+            }
+            Section {
                 HStack(alignment: .top) {
                     TextField("What should Mantiza do?", text: $request, axis: .vertical)
                         .lineLimit(1...4)

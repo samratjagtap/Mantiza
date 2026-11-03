@@ -7,6 +7,7 @@
     python3 tools/hands_cli.py type "Hello, World! 123"
     python3 tools/hands_cli.py stress 200  # 200 pointer moves, then report HID drops
     python3 tools/hands_cli.py events      # print button / shake events until Ctrl-C
+    python3 tools/hands_cli.py talk out.wav  # hold A on the stick, speak, let go: saves the recording
 
 USB only on purpose: if the Mac bonded with the board over Bluetooth, macOS could adopt it as its own keyboard/mouse.
 Requires pyserial (pip install -r tools/requirements.txt).
@@ -17,8 +18,11 @@ import itertools
 import json
 import sys
 import time
+import wave
 
 import serial
+
+import adpcm
 
 ABS_MAX = 32767
 GRID = (0.12, 0.5, 0.88)
@@ -91,6 +95,36 @@ def cmd_events(hands, args):
         pass
 
 
+def cmd_talk(hands, args):
+    print("hold A on the stick, speak, then let go")
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        line = hands.serial.readline().decode(errors="replace").strip()
+        if line.startswith("evt talk_start"):
+            print("recording...")
+        elif line.startswith("evt talk_short"):
+            sys.exit("too short; hold A while you speak")
+        elif line.startswith("evt talk_end"):
+            _, _, utt, count = line.split()
+            break
+    else:
+        sys.exit("no recording within 60 s")
+    samples = []
+    for seq in range(int(count)):
+        reply = hands.call(f"audio {utt} {seq}")
+        if not reply.startswith("ok "):
+            sys.exit(f"packet {seq}: {reply}")
+        got, pcm = adpcm.decode_packet(bytes.fromhex(reply[3:]))
+        assert got == seq, (got, seq)
+        samples += pcm
+    with wave.open(args.out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"".join(int(s).to_bytes(2, "little", signed=True) for s in samples))
+    print(f"{args.out}: {len(samples) / 16000:.1f} s from {count} packets")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--port")
@@ -105,6 +139,8 @@ def main():
     stress = sub.add_parser("stress")
     stress.add_argument("count", type=int, nargs="?", default=200)
     sub.add_parser("events")
+    talk = sub.add_parser("talk")
+    talk.add_argument("out", nargs="?", default="talk.wav")
     args = parser.parse_args()
 
     hands = Hands(args.port)
@@ -116,7 +152,7 @@ def main():
     elif args.command == "type":
         print(hands.call(f"type {args.text}", timeout=30))
     else:
-        {"grid": cmd_grid, "stress": cmd_stress, "events": cmd_events}[args.command](hands, args)
+        {"grid": cmd_grid, "stress": cmd_stress, "events": cmd_events, "talk": cmd_talk}[args.command](hands, args)
 
 
 if __name__ == "__main__":

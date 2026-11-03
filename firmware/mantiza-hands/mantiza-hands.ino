@@ -4,7 +4,8 @@
 //
 // Protocol: one line per command, "<id> <command>", answered "<id> ok [result]" or "<id> err <why>".
 // The same lines work over the BLE cmd/reply characteristics and USB serial (115200). Unsolicited events
-// from the device are sent as "evt <name>" (a, b, stop, pairing, yes, no, timeout).
+// from the device are sent as "evt <name>" (a, b, stop, pairing, yes, no, timeout, talk_start UTT,
+// talk_end UTT PACKETS, talk_short UTT). Holding A records speech for the app (audio.h).
 //
 // Pointer (absolute, x and y in 0..32767 across the whole screen):
 //   at X Y | wake | move DX DY | tap X Y [hold_ms] | longpress X Y [ms] | stroke X1 Y1 X2 Y2 N
@@ -12,6 +13,7 @@
 // Keys: type TEXT (US ASCII) | key COMBO (cmd+v, enter, shift+tab ...) | home | consumer NAME|0xNNNN
 // Board: ping | status | version | ui STATE [STEP/TOTAL] TEXT | next TEXT | ask SECONDS TEXT | pair | unpair
 //        prompt SECONDS TEXT (non-blocking ask; evt yes|no|timeout follows) | unprompt [TEXT]
+//        audio UTT SEQ (send a recorded packet again; over USB the reply carries it as plain hex)
 // Auth (BLE only; see session_auth.h): secret HEX64 | hello -> ok NONCE | auth HMAC_HEX; then every other BLE
 //   line carries " ~TAG" (HMAC of the line keyed by the session). ping, version, status need no tag.
 
@@ -22,12 +24,13 @@
 #include "hands.h"
 #include "ui.h"
 #include "session_auth.h"
+#include "audio.h"
 
 #ifndef DEBUG_SERIAL
 #define DEBUG_SERIAL 0
 #endif
 
-const char *FIRMWARE_VERSION = "0.3.0";
+const char *FIRMWARE_VERSION = "0.4.0";
 const int WATCHDOG_MS = 8000;
 const uint32_t ASK_MAX_S = 120;
 const uint32_t PAIRING_WINDOW_MS = 120000;
@@ -87,6 +90,7 @@ String board(const String &line, const String &id, bool usb) {
   if (cmd == "status") return String("ok ") + statusJson();
   if (cmd == "ui") return uiCommand(arg);
   if (cmd == "next") { ui_set_next(arg); return "ok"; }
+  if (cmd == "audio") return audio_command(arg, usb);
   if (cmd == "pair") { ble_open_pairing(PAIRING_WINDOW_MS); return "ok"; }
   if (cmd == "ask") {
     int sp2 = arg.indexOf(' ');
@@ -163,6 +167,7 @@ void setup() {
   snprintf(suffix, sizeof suffix, "%02X%02X", mac[4], mac[5]);
   String name = "Mantiza Hands " + String(suffix);
   ui_begin(name);
+  audio_begin();
   auth_begin();
   ble_begin(name);
   xTaskCreatePinnedToCore(statusTask, "status", 4096, NULL, 1, NULL, 1);

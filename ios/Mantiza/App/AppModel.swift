@@ -14,6 +14,8 @@ import UIKit
     let live = LiveRun()
     let runs = RunStore()
     let workflows = WorkflowStore()
+    /// Push-to-talk on the stick.
+    let talk: StickTalk
     /// The workflow shown as "Next" on the stick.
     private(set) var suggestion: Workflow?
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
@@ -43,6 +45,7 @@ import UIKit
         let channel = mock?.commands ?? link.commands
         hands = Hands(channel: channel, calibration: CalibrationStore.load(screen: Screen.size) ?? .identity)
         onboarded = UserDefaults.standard.bool(forKey: "onboarded")
+        talk = StickTalk(channel: channel)
         channel.onEvent = { [weak self] event in self?.received(event) }
         channel.onSent = { line, result, ms in
             switch result {
@@ -63,6 +66,12 @@ import UIKit
         RunControl.stop = { [weak self] in self?.requestStop() }
         link.onLinkUp = { [weak self] in Task { await self?.suggestNext() } }
         RunControl.answer = { [weak self] yes in self?.approvals.resolve(yes, source: "phone") }
+        link.onAudio = { [weak self] packet in
+            guard let self else { return }
+            talk.audio.key = link.audioKey
+            talk.audio.receive(packet)
+        }
+        talk.onRequest = { [weak self] text in self?.requestFromStick(text) }
         if mock == nil { link.start() }
         Log.event("app.start", ["mock": useMock, "onboarded": onboarded])
     }
@@ -77,7 +86,7 @@ import UIKit
 
     func received(_ event: BoardEvent) {
         lastEvent = event
-        Log.event("board.event", ["name": event.rawValue])
+        Log.event("board.event", ["name": event.name])
         switch event {
         case .stop:
             stopRequested = true
@@ -90,8 +99,47 @@ import UIKit
             if UIApplication.shared.applicationState == .active { Task { await run(w) } } else {
                 Notifier.tell("Open Mantiza to run “\(w.name)”.")
             }
+        case .b, .talkStart, .talkEnd, .talkShort:
+            talk.handle(event)
         default: break
         }
+    }
+
+    /// Screen sharing is on, so requests from the stick can run with the phone on any screen.
+    var sessionLive: Bool { screen.live }
+
+    /// Start a session: share the screen once; then the stick does the rest.
+    func startSession() async {
+        do {
+            try await screen.start()
+            try? await channel.send(.ui(.info, text: "Ready.|Hold A to talk."))
+            Log.event("session.start")
+        } catch {
+            Log.event("session.failed", ["error": error.localizedDescription])
+        }
+    }
+
+    func stopSession() async {
+        await screen.stop()
+        try? await channel.send(.ui(.info, text: "Session ended.|Open Mantiza to start again."))
+        Log.event("session.stop")
+    }
+
+    /// A spoken request from the stick: run it if the phone can be operated, else say why on the stick.
+    func requestFromStick(_ text: String) {
+        let active = UIApplication.shared.applicationState == .active
+        let problem: String? =
+            runner.running ? "Still working on the last task.|B = stop it" :
+            !UIApplication.shared.isProtectedDataAvailable ? "Unlock your iPhone,|then hold A again." :
+            !screen.live && !active ? "Open Mantiza and tap|Start session." : nil
+        if let problem {
+            Log.event("talk.refused", ["why": problem])
+            Task { try? await channel.send(.ui(.error, text: problem)) }
+            if !screen.live && !active { Notifier.tell("Tap to open Mantiza and start a session, then talk to the stick.") }
+            return
+        }
+        Log.event("talk.request", ["text": text])
+        Task { await run(text) }
     }
 
     func clearStop() { stopRequested = false }

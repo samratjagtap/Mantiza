@@ -19,7 +19,7 @@ If flashing leaves the stick in download mode (screen dark), press the side powe
 
 ## Pairing
 
-1. The first time (no bonds), pairing is open. Later, hold **A** for 3 s on the idle screen to open it for 2 minutes.
+1. The first time (no bonds), pairing is open. Later, hold **A and B together** for 3 s to open it for 2 minutes.
 2. On the iPhone: Settings > Accessibility > Touch > AssistiveTouch > Devices > Bluetooth Devices > **Mantiza Hands XXXX**.
 3. Keep Portrait Orientation Lock on (the absolute pointer maps onto the portrait screen).
 
@@ -29,7 +29,7 @@ Only the paired Mantiza app may drive the stick over Bluetooth (every app on the
 
 1. The app makes a random secret and sends `secret HEX64`. The stick shows **Pair code NNNN**; press **A** within 60 s if the
    app shows the same code. The secret is kept in flash. A new secret is only accepted when none exists or pairing is open
-   (hold A for 3 s), so another app cannot replace it.
+   (hold A and B for 3 s), so another app cannot replace it.
 2. On each connection: `hello` returns a nonce, the app answers `auth HMAC_HEX`.
 3. After that every BLE line ends with ` ~TAG`: the first 8 bytes of HMAC-SHA256(secret, session nonce + line), hex. Ids must
    go up. Lines without a valid tag get `err auth`. `ping`, `version`, `status`, `hello`, `auth` and `secret` need no tag.
@@ -40,12 +40,21 @@ USB serial is not checked, so the Mac harness keeps working. `unpair` also erase
 
 | Screen | A | B |
 |---|---|---|
-| Idle | click: event `a` (run next suggestion); hold 3 s: open pairing | click: event `b`; hold 1 s: stop |
-| Working | | click or hold: emergency stop |
+| Idle | click: event `a` (run next suggestion); hold: talk | click: event `b` (also cancels a heard request); hold 1 s: stop |
+| Working | hold: talk (answer a question) | click or hold: emergency stop |
 | Approve? (`ask`, `prompt`) | Yes | No |
 | Pair code | Confirm | Cancel |
 
-Shaking the stick while it is working or asking is also an emergency stop.
+Shaking the stick while it is working or asking is also an emergency stop. Holding **A and B together** for 3 s
+opens pairing.
+
+## Talking to the stick
+
+Hold A, speak, let go. The stick records 16 kHz speech with its microphone, encodes it as IMA ADPCM (4:1) and
+streams it to the app on the `audio` characteristic (`...0604`, notify), encrypted with AES-128-CTR under a key
+derived from the session (see `audio.h`); nothing is sent before the app has authenticated. The app transcribes it
+on the phone. Events: `talk_start UTT`, `talk_end UTT PACKETS`, `talk_short UTT`; `audio UTT SEQ` sends a lost packet
+again. `tools/hands_cli.py talk out.wav` records over USB to a WAV for testing.
 
 ## Protocol
 

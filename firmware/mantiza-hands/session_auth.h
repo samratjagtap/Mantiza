@@ -19,4 +19,7 @@ void auth_reset();                    // connection changed: authenticate again
 // the user confirms the 4-digit code on the stick with A. Returns "ok", or an error text.
 String auth_set(const String &secret_hex);
 void auth_clear();                    // forget the secret (unpair)
+// AES-128 key for this session's audio: HMAC-SHA256(secret, "mantiza-audio" || session nonce), first 16 bytes.
+// False until the app has authenticated.
+bool auth_audio_key(uint8_t key[16]);
 String auth_code(const uint8_t *secret, size_t n);  // 4 digits shown on the stick and in the app

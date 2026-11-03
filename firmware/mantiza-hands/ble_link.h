@@ -13,6 +13,7 @@ bool ble_connected();
 bool ble_pop_cmd(String &line, uint32_t wait_ms);  // next `cmd` write, oldest first
 void ble_reply(const String &line);                // queued
 void ble_status(const String &json);               // latest wins
+bool ble_audio(const uint8_t *p, size_t n);        // one audio packet to the app (audio.h); waits up to 300 ms
 void ble_unpair();
 void ble_set_battery(uint8_t percent);
 

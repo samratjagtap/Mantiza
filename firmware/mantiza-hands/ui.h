@@ -20,7 +20,8 @@ bool ui_unprompt(const String &text);
 bool ui_stop_requested();   // latched until ui_clear_stop()
 void ui_clear_stop();
 uint32_t ui_stop_count();
-bool ui_pop_event(String &event);  // "a", "b", "stop", "pairing", "yes", "no", "timeout" for the app
+bool ui_pop_event(String &event);  // "a", "b", "stop", "pairing", "yes", "no", "timeout", "talk_…" for the app
+void ui_event(const char *event);  // queue an event for the app (up to 23 characters)
 
 int ui_battery();     // percent, -1 if unknown
 bool ui_charging();

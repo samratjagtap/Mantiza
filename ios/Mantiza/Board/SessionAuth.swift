@@ -27,6 +27,11 @@ enum SessionAuth {
         return line + " ~" + hex(Data(mac).prefix(8))
     }
 
+    /// AES-128 key for this session's push-to-talk audio: HMAC(secret, "mantiza-audio" || nonce), first 16 bytes.
+    static func audioKey(secret: Data, nonce: Data) -> Data {
+        Data(HMAC<SHA256>.authenticationCode(for: Data("mantiza-audio".utf8) + nonce, using: SymmetricKey(data: secret))).prefix(16)
+    }
+
     static func hex(_ d: Data) -> String { d.map { String(format: "%02x", $0) }.joined() }
 
     static func unhex(_ s: String) -> Data? {

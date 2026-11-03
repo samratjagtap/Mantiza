@@ -99,3 +99,45 @@ import XCTest
         Task { @MainActor in self.commands.handle("\(id) err mouse not ready") }
     }
 }
+
+/// Push-to-talk from the stick. Vectors from tools/adpcm.py (the firmware's encoder) and openssl AES-128-CTR.
+@MainActor final class StickAudioTests: XCTestCase {
+    let plain = "07000000000070777777060008809898aabadbbabcbaacaaaa99003053443434344333432223"
+    let sealed = "0700f9a27cd2ff0263752b321f6ba6bf8d2fb87f398363e2a6a6a5ce330356a1990c739989ef"
+    var key: Data { SessionAuth.audioKey(secret: Data(0..<32), nonce: Data(100..<116)) }
+
+    func testAudioKeyMatchesFirmwareDerivation() {
+        XCTAssertEqual(SessionAuth.hex(key), "c808ccdda87d604cab0f4dab87f54811")
+    }
+
+    func testDecryptsAndDecodesAPacket() throws {
+        let packet = try XCTUnwrap(SessionAuth.unhex(sealed))
+        let opened = try XCTUnwrap(StickAudio.decrypt(packet, key: key, utterance: 3))
+        XCTAssertEqual(SessionAuth.hex(opened), plain)
+        let (seq, samples) = try XCTUnwrap(StickAudio.decode(opened))
+        XCTAssertEqual(seq, 7)
+        XCTAssertEqual(samples.count, 64)
+        XCTAssertEqual(Array(samples.prefix(6)), [0, 11, 41, 104, 240, 533])
+        XCTAssertEqual(samples.map(Int.init).reduce(0, +), 19633)
+        // The wrong utterance (another IV) does not decode to the same audio.
+        XCTAssertNotEqual(StickAudio.decrypt(packet, key: key, utterance: 4), opened)
+    }
+
+    func testWaitsForMissingPackets() throws {
+        let audio = StickAudio()
+        audio.key = key
+        audio.begin(3)
+        XCTAssertEqual(audio.missing(of: 1), [0])
+        XCTAssertNil(audio.buffer(of: 1))
+        // A packet for seq 7 only: the utterance is complete only when 0...7 are all in.
+        audio.receive(try XCTUnwrap(SessionAuth.unhex(sealed)))
+        XCTAssertEqual(audio.missing(of: 8), Array(0..<7))
+    }
+
+    func testTalkEventsParse() {
+        XCTAssertEqual(BoardLine.parse("evt talk_start 5"), .event(.talkStart(5)))
+        XCTAssertEqual(BoardLine.parse("evt talk_end 5 93"), .event(.talkEnd(5, packets: 93)))
+        XCTAssertNil(BoardLine.parse("evt talk_end 5"))
+        XCTAssertEqual(BoardCommand.audio(utterance: 5, seq: 2).line, "audio 5 2")
+    }
+}

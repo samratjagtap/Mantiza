@@ -114,7 +114,7 @@ String auth_code(const uint8_t *s, size_t n) {
 String auth_set(const String &secret_hex) {
   uint8_t s[32];
   if (!unhex(secret_hex, s, sizeof s)) return "err secret needs 64 hex characters";
-  if (hasSecret && !ble_pairing_open()) return "err locked: hold A for 3 s on the stick to allow a new phone";
+  if (hasSecret && !ble_pairing_open()) return "err locked: hold A and B together for 3 s on the stick to allow a new phone";
   int answer = ui_ask("Pair code " + auth_code(s, sizeof s) + "|Same on phone?|A = yes", 60000);
   if (answer != 1) return "err code not confirmed on the stick";
   Preferences p;
@@ -125,6 +125,23 @@ String auth_set(const String &secret_hex) {
   hasSecret = true;
   authed = false;  // the app authenticates with hello/auth next
   return "ok";
+}
+
+bool auth_audio_key(uint8_t key[16]) {
+  if (!hasSecret || !authed) return false;
+  static const char label[] = "mantiza-audio";
+  uint8_t mac[32];
+  const mbedtls_md_info_t *md = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  mbedtls_md_context_t ctx;
+  mbedtls_md_init(&ctx);
+  mbedtls_md_setup(&ctx, md, 1);
+  mbedtls_md_hmac_starts(&ctx, secret, sizeof secret);
+  mbedtls_md_hmac_update(&ctx, (const uint8_t *)label, sizeof label - 1);
+  mbedtls_md_hmac_update(&ctx, sessionNonce, sizeof sessionNonce);
+  mbedtls_md_hmac_finish(&ctx, mac);
+  mbedtls_md_free(&ctx);
+  memcpy(key, mac, 16);
+  return true;
 }
 
 void auth_clear() {

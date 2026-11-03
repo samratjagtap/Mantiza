@@ -37,6 +37,9 @@ import Observation
     @ObservationIgnored private var peripheral: CBPeripheral?
     @ObservationIgnored private var chars: [CBUUID: CBCharacteristic] = [:]
     @ObservationIgnored private var subscribed = Set<CBUUID>()
+    /// Push-to-talk packets from the stick and the key to read them (set once the stick has authenticated us).
+    @ObservationIgnored var onAudio: ((Data) -> Void)?
+    @ObservationIgnored private(set) var audioKey: Data?
     @ObservationIgnored private var candidates: [UUID: CBPeripheral] = [:]
     @ObservationIgnored private var lastNotify = Date.distantPast
     @ObservationIgnored private var watchdog: Task<Void, Never>?
@@ -212,6 +215,7 @@ import Observation
         chars = [:]
         subscribed = []
         commands.linkDown()
+        audioKey = nil
         if was {
             Log.event("board.down")
             onLinkDown?()
@@ -266,6 +270,7 @@ import Observation
                 }
                 try await commands.send(.auth(SessionAuth.answer(secret: secret, nonce: nonce)))
                 commands.signer = { SessionAuth.sign($0, secret: secret, nonce: nonce) }
+                audioKey = SessionAuth.audioKey(secret: secret, nonce: nonce)
                 if UserDefaults.standard.bool(forKey: "authSelfTest") {  // launch with -authSelfTest YES
                     let signer = commands.signer
                     commands.signer = nil
@@ -285,7 +290,7 @@ import Observation
         } catch {
             let text = error.localizedDescription
             lastError = text.contains("locked") || text.contains("auth failed")
-                ? "This stick is paired with another copy of Mantiza. Hold A on the stick for 3 s, then tap Re-pair."
+                ? "This stick is paired with another copy of Mantiza. Hold A and B together on the stick for 3 s, then tap Re-pair."
                 : text
             Log.event("board.auth_failed", ["error": text])
         }
@@ -356,7 +361,7 @@ extension BoardLink: CBPeripheralDelegate {
             guard let service = p.services?.first(where: { $0.uuid == BoardUUID.service }) else {
                 return fail("This stick has no Mantiza service. Flash the Mantiza Hands firmware.")
             }
-            p.discoverCharacteristics(BoardUUID.all, for: service)
+            p.discoverCharacteristics(BoardUUID.discover, for: service)
         }
     }
 
@@ -370,7 +375,7 @@ extension BoardLink: CBPeripheralDelegate {
             }
             for c in service.characteristics ?? [] {
                 chars[c.uuid] = c
-                if [BoardUUID.reply, BoardUUID.status].contains(c.uuid) { p.setNotifyValue(true, for: c) }
+                if [BoardUUID.reply, BoardUUID.status, BoardUUID.audio].contains(c.uuid) { p.setNotifyValue(true, for: c) }
             }
         }
     }
@@ -394,6 +399,8 @@ extension BoardLink: CBPeripheralDelegate {
             switch c.uuid {
             case BoardUUID.reply:
                 commands.handle(String(decoding: value, as: UTF8.self))
+            case BoardUUID.audio:
+                onAudio?(value)
             case BoardUUID.status:
                 guard let s = BoardStatus.decode(value) else { return }
                 if !transportReady, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]) { ready(p) }
