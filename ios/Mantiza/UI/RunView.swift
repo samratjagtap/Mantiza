@@ -5,13 +5,29 @@ struct RunView: View {
     @Environment(AppModel.self) private var app
     @State private var request = ""
     @State private var task: Task<Void, Never>?
+    @State private var voice = VoiceInput()
 
     var body: some View {
         let runner = app.runner
         List {
             Section {
-                TextField("What should Mantiza do?", text: $request, axis: .vertical)
-                    .lineLimit(1...4)
+                HStack(alignment: .top) {
+                    TextField("What should Mantiza do?", text: $request, axis: .vertical)
+                        .lineLimit(1...4)
+                    Button {
+                        Task {
+                            if voice.listening { request = await voice.stop() } else { await voice.start() }
+                        }
+                    } label: {
+                        Image(systemName: voice.listening ? "stop.circle.fill" : "mic.circle")
+                            .font(.title2)
+                            .foregroundStyle(voice.listening ? .red : .accentColor)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(voice.listening ? "Stop listening" : "Speak your request")
+                }
+                if voice.listening { Text(voice.text.isEmpty ? "Listening…" : voice.text).foregroundStyle(.secondary) }
+                if !voice.error.isEmpty { Text(voice.error).font(.footnote).foregroundStyle(.red) }
                 if runner.running {
                     Button("Stop", role: .destructive) { app.requestStop(); task?.cancel() }
                 } else {
