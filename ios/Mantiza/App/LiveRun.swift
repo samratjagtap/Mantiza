@@ -22,6 +22,12 @@ import UserNotifications
         push()
     }
 
+    /// Replace the action line (recovery stages, "back online").
+    func note(_ text: String) {
+        state.action = text
+        push()
+    }
+
     func ask(_ question: String) {
         state.question = question
         push()

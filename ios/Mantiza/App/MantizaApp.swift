@@ -5,6 +5,7 @@ import UserNotifications
 struct MantizaApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var app = AppModel()
+    @Environment(\.scenePhase) private var phase
 
     var body: some Scene {
         WindowGroup {
@@ -17,6 +18,7 @@ struct MantizaApp: App {
                     Task { await Notifier.requestPermission() }
                 }
                 .onOpenURL { app.open($0) }
+                .onChange(of: phase) { _, now in if now == .active { app.resumeScreenIfWaiting() } }
         }
     }
 }

@@ -18,6 +18,8 @@ import UIKit
     let talk: StickTalk
     /// The full-screen agent widget.
     let canvas = CanvasPublisher()
+    /// Set while a run waits for a lost link to come back (RunRecovery).
+    var recovering: Recovery.Stage?
     /// The workflow shown as "Next" on the stick.
     private(set) var suggestion: Workflow?
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
@@ -183,6 +185,8 @@ import UIKit
                 }
             },
             findContacts: { await FastPath.findContacts($0) },
+            link: { [weak self] in self?.recoveryLink() ?? Recovery.Link(stick: false, pointer: false, screen: false, frameAt: 0) },
+            onRecover: { [weak self] stage in self?.recover(stage) },
             askUser: { [weak self] question in
                 guard let self else { return nil }
                 canvas.update(now: true) { $0.phase = .waiting; $0.question = question }
