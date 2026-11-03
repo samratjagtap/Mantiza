@@ -214,6 +214,14 @@ import UIKit
         }
         let screen = self.screen
         live.start(goal: workflow?.name ?? request)
+        // The stick takes a silent app during a task as a crash (firmware APP_SILENT_MS) and lets go of everything.
+        let heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2))
+                _ = try? await self?.channel.send(.ping)
+            }
+        }
+        defer { heartbeat.cancel() }
         canvas.update(now: true) {
             $0.phase = .working; $0.request = workflow?.name ?? request; $0.status = "Planning"
             $0.step = 0; $0.total = 0; $0.steps = []; $0.card = nil; $0.question = nil; $0.session = screen.live

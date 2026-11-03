@@ -30,7 +30,8 @@
 #define DEBUG_SERIAL 0
 #endif
 
-const char *FIRMWARE_VERSION = "0.4.0";
+const char *FIRMWARE_VERSION = "0.4.1";
+const uint32_t APP_SILENT_MS = 8000;  // the app pings every 2 s while a task runs
 const int WATCHDOG_MS = 8000;
 const uint32_t ASK_MAX_S = 120;
 const uint32_t PAIRING_WINDOW_MS = 120000;
@@ -196,8 +197,16 @@ void loop() {
     if (reply.length()) Serial.println(reply);
     return;
   }
+  // While a task runs the app sends a line at least every 2 s; silence means it crashed or was closed.
+  static uint32_t lastAppLine = millis();
+  UiState s = ui_state();
+  if ((s == UI_RUN || s == UI_ASK) && linked && millis() - lastAppLine > APP_SILENT_MS) {
+    hands_release();
+    ui_show(UI_ERROR, "The phone app stopped|responding. Open Mantiza.");
+  }
   String line;
   if (!ble_pop_cmd(line, 50)) return;
+  lastAppLine = millis();
   String reply = handle(line, false);
   if (reply.length()) ble_reply(reply);
 }

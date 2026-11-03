@@ -45,7 +45,9 @@ USB serial is not checked, so the Mac harness keeps working. `unpair` also erase
 | Approve? (`ask`, `prompt`) | Yes | No |
 | Pair code | Confirm | Cancel |
 
-Shaking the stick while it is working or asking is also an emergency stop. Holding **A and B together** for 3 s
+Shaking the stick while it is working or asking is also an emergency stop. A button held down with `press` is let go after
+1.5 s without another command. While a task runs the app sends a line at least every 2 s; after 8 s of silence the
+stick lets go of everything and shows "The phone app stopped responding". Holding **A and B together** for 3 s
 opens pairing.
 
 ## Talking to the stick

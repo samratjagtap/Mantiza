@@ -286,6 +286,7 @@ bool ui_pop_event(String &event) {
 }
 
 int ui_battery() { return battery; }
+UiState ui_state() { return state; }
 bool ui_charging() { return charging; }
 
 UiState ui_state_from(const String &name, bool &known) {

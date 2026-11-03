@@ -3,6 +3,8 @@
 #pragma once
 #include <Arduino.h>
 
-void hands_poll();     // clear held keys on a new HID session, retry failed releases
+// Clear held keys on a new HID session, retry failed releases, and let go of a button held by `press` once no
+// command has come for HELD_MAX_MS (the app may have died mid-drag).
+void hands_poll();
 void hands_release();  // let go of every button and key
 String hands_run(const String &line);  // "ok [result]" or "err <why>"

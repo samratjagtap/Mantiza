@@ -26,3 +26,4 @@ void ui_event(const char *event);  // queue an event for the app (up to 23 chara
 int ui_battery();     // percent, -1 if unknown
 bool ui_charging();
 UiState ui_state_from(const String &name, bool &known);
+UiState ui_state();

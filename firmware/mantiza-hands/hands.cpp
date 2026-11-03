@@ -12,12 +12,14 @@ const uint32_t WAKE_AFTER_MS = 2000;  // iOS hides an idle pointer after ~2 s
 const int WAKE_MS = 300;              // and needs a moment to show it again before a click lands
 const long STROKE_MAX = 100;
 const long LONGPRESS_MAX_MS = 5000;
+const uint32_t HELD_MAX_MS = 1500;    // a button left down by `press` with no further command
 
 static uint32_t session;
 static uint8_t buttons;
 static uint16_t posX = HID_ABS_MAX / 2, posY = HID_ABS_MAX / 2;
 static uint32_t lastPointerMs;
 static bool releasePending = true;
+static uint32_t lastCommandMs;
 
 static bool send(uint8_t report, const uint8_t *data, size_t n, int pauseMs) {
   esp_task_wdt_reset();
@@ -53,6 +55,7 @@ void hands_release() { releasePending = true; hands_poll(); }
 void hands_poll() {
   uint32_t current = ble_hid_session();
   if (current != session) { session = current; releasePending = true; }
+  if (buttons && millis() - lastCommandMs > HELD_MAX_MS) releasePending = true;
   if (!releasePending) return;
   buttons = 0;
   if (!session) return;
@@ -106,6 +109,7 @@ String hands_run(const String &line) {
   long a = 0, b = 0, c = 0, d = 0, e = 0;
   int n = sscanf(arg.c_str(), "%ld %ld %ld %ld %ld", &a, &b, &c, &d, &e);
   hands_poll();
+  lastCommandMs = millis();
   if (!session) return "err mouse not ready (pair in AssistiveTouch > Devices)";
   if (releasePending) return "err release pending";
   bool ok = false;
