@@ -189,3 +189,12 @@ final class AITests: XCTestCase {
         XCTAssertFalse(Safety.looksSecret("Meet at 5"))
     }
 }
+
+final class PlaybookTests: XCTestCase {
+    func testPlaybookShipsAndReachesTheActor() {
+        XCTAssertTrue(Playbook.version.hasPrefix("Playbook v"), Playbook.version)
+        XCTAssertTrue(Prompts.actor.contains(Playbook.version))
+        XCTAssertTrue(Prompts.actor.contains("Tapping Send, Buy or Save is not proof"))
+        XCTAssertTrue(Prompts.actor.contains("ask_user"), "the action list is still there")
+    }
+}

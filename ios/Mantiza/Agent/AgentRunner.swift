@@ -78,7 +78,7 @@ import Observation
         self.deps = deps
         steps = []; outcome = nil; history = []; training = []; amendments = []; amended = 0
         say("Planning")
-        Log.event("run.start", ["request": request])
+        Log.event("run.start", ["request": request, "playbook": Playbook.version])
         do {
             let plan = try await deps.big.plan(request)
             subtask = plan
