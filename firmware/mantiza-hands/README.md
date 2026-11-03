@@ -51,7 +51,8 @@ opens pairing.
 ## Talking to the stick
 
 Hold A, speak, let go. The stick records 16 kHz speech with its microphone, encodes it as IMA ADPCM (4:1) and
-streams it to the app on the `audio` characteristic (`...0604`, notify), encrypted with AES-128-CTR under a key
+streams it to the app on the `audio` characteristic (`...0604`, notify, in its own service `...0605` so older
+bonds keep their cached HID handles), encrypted with AES-128-CTR under a key
 derived from the session (see `audio.h`); nothing is sent before the app has authenticated. The app transcribes it
 on the phone. Events: `talk_start UTT`, `talk_end UTT PACKETS`, `talk_short UTT`; `audio UTT SEQ` sends a lost packet
 again. `tools/hands_cli.py talk out.wav` records over USB to a WAV for testing.

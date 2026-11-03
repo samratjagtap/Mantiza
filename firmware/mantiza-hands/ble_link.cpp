@@ -317,7 +317,6 @@ void ble_begin(const String &name) {
   NimBLECharacteristic *cmd = svc->createCharacteristic(UUID("0601"), NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR | NIMBLE_PROPERTY::WRITE_ENC);
   chars[CH_REPLY] = svc->createCharacteristic(UUID("0602"), NIMBLE_PROPERTY::NOTIFY);
   chars[CH_STATUS] = svc->createCharacteristic(UUID("0603"), NIMBLE_PROPERTY::NOTIFY | NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC);
-  chars[CH_AUDIO] = svc->createCharacteristic(UUID("0604"), NIMBLE_PROPERTY::NOTIFY);  // encrypted packets, audio.h
   hidDevice = new NimBLEHIDDevice(server);
   auto *hid = hidDevice;
   hid->setReportMap(const_cast<uint8_t *>(hid_report_map), hid_report_map_size);
@@ -338,6 +337,8 @@ void ble_begin(const String &name) {
   hidControl->setCallbacks(&charCb);
   hidProtocol->setCallbacks(&charCb);
   cmd->setCallbacks(&charCb);
+  // Audio in its own service after HID, so the command and HID attribute handles stay where bonded phones cached them.
+  chars[CH_AUDIO] = server->createService(UUID("0605"))->createCharacteristic(UUID("0604"), NIMBLE_PROPERTY::NOTIFY);
   for (auto *c : chars) c->setCallbacks(&charCb);
   server->start();
 

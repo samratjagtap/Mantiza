@@ -10,10 +10,10 @@ enum BoardUUID {
     static let cmd = make("0601")
     static let reply = make("0602")
     static let status = make("0603")
-    /// Push-to-talk packets (firmware 0.4.0); older sticks lack it.
+    /// Push-to-talk packets (firmware 0.4.0) in their own service; older sticks lack both.
+    static let audioService = make("0605")
     static let audio = make("0604")
     static let all = [cmd, reply, status]
-    static let discover = all + [audio]
 }
 
 /// The JSON the board notifies on `status` every second (and answers to `status`).

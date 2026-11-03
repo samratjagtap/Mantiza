@@ -1,5 +1,5 @@
-// Push-to-talk: hold A, the stick records 16 kHz speech, IMA-ADPCM encodes it (4:1) and streams it to the app,
-// which transcribes it on the phone. Each recording ("utterance") is kept in PSRAM until the next one, so the app
+// Push-to-talk: hold A, the stick records 16 kHz speech, IMA-ADPCM encodes it (4:1) and streams it to the app
+// (service ...0605, characteristic ...0604), which transcribes it on the phone. Each recording ("utterance") is kept in PSRAM until the next one, so the app
 // can ask for lost packets again.
 //
 // Packet (plain): seq u16 LE | predictor i16 LE | step index u8 | 0 | ADPCM bytes (low nibble first, 512 samples

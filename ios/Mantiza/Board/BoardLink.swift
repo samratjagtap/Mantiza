@@ -327,7 +327,7 @@ extension BoardLink: CBCentralManagerDelegate {
         MainActor.assumeIsolated {
             guard p === peripheral else { return }
             name = p.name ?? name
-            p.discoverServices([BoardUUID.service])
+            p.discoverServices([BoardUUID.service, BoardUUID.audioService])
         }
     }
 
@@ -361,7 +361,10 @@ extension BoardLink: CBPeripheralDelegate {
             guard let service = p.services?.first(where: { $0.uuid == BoardUUID.service }) else {
                 return fail("This stick has no Mantiza service. Flash the Mantiza Hands firmware.")
             }
-            p.discoverCharacteristics(BoardUUID.discover, for: service)
+            p.discoverCharacteristics(BoardUUID.all, for: service)
+            if let audio = p.services?.first(where: { $0.uuid == BoardUUID.audioService }) {
+                p.discoverCharacteristics([BoardUUID.audio], for: audio)
+            }
         }
     }
 
@@ -369,13 +372,17 @@ extension BoardLink: CBPeripheralDelegate {
         MainActor.assumeIsolated {
             guard p === peripheral else { return }
             if let error { return fail(error.localizedDescription) }
+            if service.uuid == BoardUUID.audioService {  // optional: push-to-talk
+                for c in service.characteristics ?? [] where c.uuid == BoardUUID.audio { p.setNotifyValue(true, for: c) }
+                return
+            }
             let available = Set((service.characteristics ?? []).map(\.uuid))
             guard available.isSuperset(of: BoardUUID.all) else {
                 return fail("The stick firmware is too old. Update Mantiza Hands.")
             }
             for c in service.characteristics ?? [] {
                 chars[c.uuid] = c
-                if [BoardUUID.reply, BoardUUID.status, BoardUUID.audio].contains(c.uuid) { p.setNotifyValue(true, for: c) }
+                if [BoardUUID.reply, BoardUUID.status].contains(c.uuid) { p.setNotifyValue(true, for: c) }
             }
         }
     }
