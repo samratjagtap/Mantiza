@@ -1,16 +1,35 @@
 import Foundation
 
-/// TypeSafe Jev as the fast brain: one request asks several multiple-choice questions about the numbered
-/// on-screen text (which operation, which element, which input, is each check visible). Jev only picks from
-/// options we offer and never writes text. Unsure answers return nil, and the big brain decides instead.
-struct JevPicker: FastBrain {
-    static let model = "jev-1.14.0"  // pinned: the confidence thresholds were chosen for this version
-    static let minConfidence = 0.6
-    static let minMargin = 0.1
-    static let maxElements = 200     // a choice question takes at most 255 options
-    private static let url = URL(string: "https://api.typesafe.ai/v1/systemone")!
+/// The fast brain: one request asks several multiple-choice questions about the numbered on-screen text
+/// (which operation, which element, which input, is each check visible). It only picks from options we offer
+/// and never writes text. Unsure answers return nil, and the big brain decides instead.
+/// Two services speak this `POST /v1/systemone` protocol: Laya (open source, Apache-2.0, run with
+/// tools/laya/serve.sh on the Mac) and TypeSafe's hosted Jev.
+struct SystemOnePicker: FastBrain {
+    struct Service {
+        let name: String         // "laya" or "jev": the step source in run logs
+        let url: URL
+        let model: String
+        let minConfidence: Double
+        let minMargin: Double
+        let minCheck: Double     // P(true) each verification needs before DONE counts
+        let maxElements: Int
 
-    let key: String
+        /// Pinned: the confidence thresholds were chosen for this version. A choice takes at most 255 options.
+        static let jev = Service(name: "jev", url: URL(string: "https://api.typesafe.ai/v1/systemone")!, model: "jev-1.14.0",
+                                 minConfidence: 0.6, minMargin: 0.1, minCheck: 0.7, maxElements: 200)
+
+        /// Laya's typed-decisions checkpoint. Its model card says out-of-the-box probabilities are over-confident,
+        /// so the gate is stricter than Jev's until we fit it on our own run logs. The server takes at most
+        /// 100 options per choice, and options share one token budget, so fewer elements go in.
+        static func laya(_ base: URL) -> Service {
+            Service(name: "laya", url: base.appending(path: "v1/systemone"), model: "typed-decisions",
+                    minConfidence: 0.85, minMargin: 0.3, minCheck: 0.85, maxElements: 60)
+        }
+    }
+
+    let service: Service
+    let key: String?
 
     static let operations: [String: String] = [
         "TAP": "Tap one of the on-screen text elements to make progress on the task.",
@@ -34,19 +53,20 @@ struct JevPicker: FastBrain {
     ]
 
     func decide(_ c: DecisionContext) async throws -> Decision? {
-        let elements = Array(c.reading.elements.prefix(Self.maxElements))
+        let elements = Array(c.reading.elements.prefix(service.maxElements))
         let started = Date()
-        let response = try await HTTP.postJSON(Self.url, headers: ["Authorization": "Bearer \(key)"],
-                                               body: Self.body(c, elements: elements), timeout: 25, service: "Jev")
+        let response = try await HTTP.postJSON(service.url, headers: key.map { ["Authorization": "Bearer \($0)"] } ?? [:],
+                                               body: Self.body(c, elements: elements, model: service.model), timeout: 25,
+                                               service: service.name == "laya" ? "Laya" : "Jev")
         let answers = response["answers"] as? [String: Any] ?? [:]
-        let decision = Self.interpret(answers, context: c, elements: elements)
-        Log.event("ai.call", ["brain": "jev", "model": response["model"] as? String ?? Self.model,
+        let decision = Self.interpret(answers, context: c, elements: elements, service: service)
+        Log.event("ai.call", ["brain": service.name, "model": response["model"] as? String ?? service.model,
                               "ms": Int(Date().timeIntervalSince(started) * 1000),
                               "picked": decision.map { $0.action.name } ?? "unsure"])
         return decision
     }
 
-    static func body(_ c: DecisionContext, elements: [ScreenElement]) -> [String: Any] {
+    static func body(_ c: DecisionContext, elements: [ScreenElement], model: String = Service.jev.model) -> [String: Any] {
         let state: [String: Any] = [
             "task": c.subtask.goal,
             "app": c.subtask.app ?? "any",
@@ -76,20 +96,22 @@ struct JevPicker: FastBrain {
     }
 
     /// A choice answer we can act on: an offered option, confident enough, and clearly ahead of the runner-up.
-    static func confident(_ answer: Any?, offered: Set<String>) -> String? {
+    static func confident(_ answer: Any?, offered: Set<String>, service: Service) -> String? {
         guard let a = answer as? [String: Any], let choice = a["choice"] as? String, offered.contains(choice) else { return nil }
         let confidence = (a["confidence"] as? NSNumber)?.doubleValue ?? 0
         let p = ((a["probabilities"] as? [String: Any]) ?? [:]).compactMap { ($0.value as? NSNumber)?.doubleValue }.sorted(by: >)
         let margin = p.count >= 2 ? p[0] - p[1] : (p.first ?? 0)
         let total = p.reduce(0, +)
-        guard confidence >= minConfidence, margin >= minMargin, p.isEmpty || abs(total - 1) < 0.05 else { return nil }
+        guard confidence >= service.minConfidence, margin >= service.minMargin, p.isEmpty || abs(total - 1) < 0.05 else { return nil }
         return choice
     }
 
-    static func interpret(_ answers: [String: Any], context c: DecisionContext, elements: [ScreenElement]) -> Decision? {
+    static func interpret(_ answers: [String: Any], context c: DecisionContext, elements: [ScreenElement],
+                          service: Service = .jev) -> Decision? {
+        func confident(_ answer: Any?, offered: Set<String>) -> String? { Self.confident(answer, offered: offered, service: service) }
         guard let op = confident(answers["operation"], offered: Set(operations.keys)) else { return nil }
         let conf = ((answers["operation"] as? [String: Any])?["confidence"] as? NSNumber)?.doubleValue ?? 0
-        func decision(_ a: AgentAction, _ why: String) -> Decision { Decision(action: a, reason: why, confidence: conf, source: "jev") }
+        func decision(_ a: AgentAction, _ why: String) -> Decision { Decision(action: a, reason: why, confidence: conf, source: service.name) }
         switch op {
         case "TAP":
             let offered = Set(elements.map { "e\($0.id)" })
@@ -106,7 +128,7 @@ struct JevPicker: FastBrain {
         case "WAIT": return decision(.wait, "wait")
         case "DONE":
             let checks = c.subtask.verification.indices.map { ((answers["verify_\($0)"] as? [String: Any])?["noul"] as? NSNumber)?.doubleValue ?? 0 }
-            guard !checks.isEmpty, checks.allSatisfy({ $0 >= 0.7 }) else { return nil }
+            guard !checks.isEmpty, checks.allSatisfy({ $0 >= service.minCheck }) else { return nil }
             return decision(.done("all checks visible"), "done")
         default: return nil  // HOME, BLOCKED and NEEDS_AGENT go to the big brain
         }

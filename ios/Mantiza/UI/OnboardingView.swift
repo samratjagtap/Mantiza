@@ -29,7 +29,7 @@ struct OnboardingView: View {
         case .welcome:
             Page(title: "Welcome to Mantiza", symbol: "hand.tap") {
                 Text("Mantiza does tasks on this iPhone for you, like sending a message or opening a map. Its stick, Mantiza Hands, taps and types the way you would.")
-                Text("While a task runs, Mantiza shares your screen with the AI services you choose: Anthropic (Claude), Google (Gemini) and TypeSafe (Jev). It asks before sending, deleting or buying anything.")
+                Text("While a task runs, Mantiza shares your screen with the AI services you choose: Anthropic (Claude) or Google (Gemini), and the quick picker (Laya on your own server, or TypeSafe's Jev). It asks before sending, deleting or buying anything.")
                     .foregroundStyle(.secondary)
             }
         case .connect:

@@ -48,8 +48,9 @@ struct PrivacyView: View {
             Section("Sent to AI services during a task") {
                 LabeledContent("Anthropic (Claude)", value: "screenshots, screen text")
                 LabeledContent("Google (Gemini)", value: "screenshots, screen text")
-                LabeledContent("TypeSafe (Jev)", value: "screen text")
-                Text("Only the service you choose as big brain receives screenshots. Jev never receives images.")
+                LabeledContent("Laya (your own server)", value: "screen text")
+                LabeledContent("TypeSafe (Jev), if chosen", value: "screen text")
+                Text("Only the service you choose as big brain receives screenshots. The quick picker never receives images.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Kept on this iPhone") {

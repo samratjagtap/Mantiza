@@ -37,7 +37,7 @@ struct RunDetailView: View {
             Section {
                 Text(run.outcome)
                 LabeledContent("Big brain", value: run.bigBrain)
-                LabeledContent("AI calls", value: "\(run.bigCalls) big, \(run.fastCalls) Jev")
+                LabeledContent("AI calls", value: "\(run.bigCalls) big, \(run.fastCalls) quick")
                 LabeledContent("Total", value: String(format: "%.1f s", Double(run.totalMs) / 1000))
             }
             Section("Steps (decide / see / read / act, ms)") {

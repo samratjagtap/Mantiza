@@ -2,3 +2,5 @@ firmware/*/build/
 __pycache__/
 tools/e2e/out/
 .DS_Store
+tools/laya/.key
+tools/laya/.venv/

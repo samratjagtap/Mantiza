@@ -5,13 +5,14 @@ import Security
 /// v1 calls the AI services directly with these keys ("direct mode"); a proxy backend replaces this later.
 enum KeyStore {
     enum Provider: String, CaseIterable, Identifiable {
-        case anthropic, google, typesafe
+        case anthropic, google, typesafe, laya
         var id: String { rawValue }
         var title: String {
             switch self {
             case .anthropic: return "Anthropic (Claude)"
             case .google: return "Google (Gemini)"
             case .typesafe: return "TypeSafe (Jev)"
+            case .laya: return "Laya server (LAYA_API_KEY)"
             }
         }
     }

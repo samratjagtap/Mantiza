@@ -34,6 +34,13 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mantiza sends the text on your screen to the Laya server on your own computer to pick quick steps.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Mantiza connects to its Mantiza Hands stick, which taps and types on this iPhone for you.</string>
 	<key>NSContactsUsageDescription</key>

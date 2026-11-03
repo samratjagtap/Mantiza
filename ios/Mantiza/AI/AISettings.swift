@@ -19,10 +19,18 @@ enum AISettings {
         set { UserDefaults.standard.set(newValue, forKey: "ai.geminiModel") }
     }
 
-    /// Use Jev for quick picks when its key is set.
-    static var useJev: Bool {
-        get { UserDefaults.standard.object(forKey: "ai.useJev") as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: "ai.useJev") }
+    /// Who picks quick steps from the screen text: Laya on the user's own server, TypeSafe's Jev, or nobody.
+    enum Fast: String, CaseIterable, Identifiable { case laya, jev, off; var id: String { rawValue } }
+
+    static var fast: Fast {
+        get { Fast(rawValue: UserDefaults.standard.string(forKey: "ai.fast") ?? "") ?? .laya }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "ai.fast") }
+    }
+
+    /// Where tools/laya/serve.sh runs, e.g. http://10.0.0.243:8000 (the Mac's address on the same Wi-Fi).
+    static var layaURL: String {
+        get { UserDefaults.standard.string(forKey: "ai.layaURL") ?? "" }
+        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "ai.layaURL") }
     }
 
     static func bigBrain() throws -> BigBrain {
@@ -37,7 +45,15 @@ enum AISettings {
     }
 
     static func fastBrain() -> FastBrain? {
-        guard useJev, let key = KeyStore.get(.typesafe) else { return nil }
-        return JevPicker(key: key)
+        switch fast {
+        case .laya:
+            guard let url = URL(string: layaURL), url.scheme?.hasPrefix("http") == true, url.host() != nil else { return nil }
+            return SystemOnePicker(service: .laya(url), key: KeyStore.get(.laya))
+        case .jev:
+            guard let key = KeyStore.get(.typesafe) else { return nil }
+            return SystemOnePicker(service: .jev, key: key)
+        case .off:
+            return nil
+        }
     }
 }

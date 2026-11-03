@@ -16,7 +16,7 @@ struct RunRecord: Codable, Identifiable, Equatable {
     var totalMs: Int { steps.reduce(0) { $0 + $1.ms + $1.captureMs + $1.ocrMs + $1.actMs } }
     /// Steps decided by the big brain (plus planning and the final check), and by Jev.
     var bigCalls: Int { steps.filter { $0.source == "claude" || $0.source == "gemini" }.count + (plan == nil ? 0 : 1) }
-    var fastCalls: Int { steps.filter { $0.source == "jev" }.count }
+    var fastCalls: Int { steps.filter { $0.source == "laya" || $0.source == "jev" }.count }
 }
 
 /// Run history on disk. Each run is its own file, so a crash never loses the others.

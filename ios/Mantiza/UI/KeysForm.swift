@@ -7,7 +7,7 @@ struct KeysForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Paste your API keys. They stay in this iPhone's Keychain and go only to that company. Claude is needed; Jev makes most steps faster; Gemini is optional.")
+            Text("Paste your API keys. They stay in this iPhone's Keychain and go only to that company. Claude is needed; Laya (or Jev) makes most steps faster; Gemini is optional.")
                 .font(.callout).foregroundStyle(.secondary)
             ForEach(KeyStore.Provider.allCases) { p in
                 VStack(alignment: .leading, spacing: 6) {

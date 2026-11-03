@@ -59,7 +59,8 @@ Approve) and the workflow widget (Now / Pinned / Recent tabs).
   Keychain per stick), gestures (`Hands`), `MockBoard`.
 - `Mantiza/Calibration`: tap probe, 3x3 fit and 5-point check.
 - `Mantiza/Eyes`: screen capture (ScreenCaptureKit), settle detection, Vision OCR into screen elements.
-- `Mantiza/AI`: big brains (`ClaudeBrain`, `GeminiBrain`), the fast picker (`JevPicker`), keys in the Keychain.
+- `Mantiza/AI`: big brains (`ClaudeBrain`, `GeminiBrain`), the quick picker (`SystemOnePicker`: Laya on your own
+  server via `tools/laya/serve.sh`, or TypeSafe's Jev), keys in the Keychain.
 - `Mantiza/Agent`: the agent loop (`AgentRunner`), safety rules, approvals from stick or phone, fast paths (Messages,
   Maps, Shortcuts links).
 - `Mantiza/Workflows`: run log with step timings (`RunStore`), learned workflows and suggestions (`WorkflowStore`).

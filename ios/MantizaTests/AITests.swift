@@ -68,7 +68,7 @@ final class AITests: XCTestCase {
     }
 
     func testJevBody() throws {
-        let body = JevPicker.body(context, elements: reading.elements)
+        let body = SystemOnePicker.body(context, elements: reading.elements)
         XCTAssertEqual(body["model"] as? String, "jev-1.14.0")
         let q = try XCTUnwrap(body["questions"] as? [String: Any])
         XCTAssertEqual(Set(q.keys), ["operation", "tap_target", "text_input", "verify_0"])
@@ -86,22 +86,22 @@ final class AITests: XCTestCase {
             "operation": choice("TAP", ["TAP": 0.9, "WAIT": 0.1], confidence: 0.85),
             "tap_target": choice("e1", ["e1": 0.8, "e2": 0.1, "NONE": 0.1], confidence: 0.7),
         ]
-        XCTAssertEqual(JevPicker.interpret(answers, context: context, elements: reading.elements)?.action,
+        XCTAssertEqual(SystemOnePicker.interpret(answers, context: context, elements: reading.elements)?.action,
                        .tap(element: 1, at: reading.elements[0].center))
     }
 
     func testJevUnsureGoesToBigBrain() {
         let lowMargin: [String: Any] = ["operation": choice("TAP", ["TAP": 0.5, "BACK": 0.45, "WAIT": 0.05], confidence: 0.7)]
-        XCTAssertNil(JevPicker.interpret(lowMargin, context: context, elements: reading.elements))
+        XCTAssertNil(SystemOnePicker.interpret(lowMargin, context: context, elements: reading.elements))
         let lowConfidence: [String: Any] = ["operation": choice("TAP", ["TAP": 0.6, "BACK": 0.4], confidence: 0.3)]
-        XCTAssertNil(JevPicker.interpret(lowConfidence, context: context, elements: reading.elements))
+        XCTAssertNil(SystemOnePicker.interpret(lowConfidence, context: context, elements: reading.elements))
         let needsAgent: [String: Any] = ["operation": choice("NEEDS_AGENT", ["NEEDS_AGENT": 1], confidence: 1)]
-        XCTAssertNil(JevPicker.interpret(needsAgent, context: context, elements: reading.elements))
+        XCTAssertNil(SystemOnePicker.interpret(needsAgent, context: context, elements: reading.elements))
         let unknownTarget: [String: Any] = [
             "operation": choice("TAP", ["TAP": 1], confidence: 1),
             "tap_target": choice("e9", ["e9": 1], confidence: 1),
         ]
-        XCTAssertNil(JevPicker.interpret(unknownTarget, context: context, elements: reading.elements))
+        XCTAssertNil(SystemOnePicker.interpret(unknownTarget, context: context, elements: reading.elements))
     }
 
     func testJevTypesOnlyOfferedInputAndDoneNeedsChecks() {
@@ -109,11 +109,36 @@ final class AITests: XCTestCase {
             "operation": choice("TYPE_TEXT", ["TYPE_TEXT": 1], confidence: 1),
             "text_input": choice("t0", ["t0": 0.95, "NONE": 0.05], confidence: 0.9),
         ]
-        XCTAssertEqual(JevPicker.interpret(type, context: context, elements: [])?.action, .type("I'm coming"))
+        XCTAssertEqual(SystemOnePicker.interpret(type, context: context, elements: [])?.action, .type("I'm coming"))
         var done: [String: Any] = ["operation": choice("DONE", ["DONE": 1], confidence: 1), "verify_0": ["type": "noul", "noul": 0.4]]
-        XCTAssertNil(JevPicker.interpret(done, context: context, elements: []))
+        XCTAssertNil(SystemOnePicker.interpret(done, context: context, elements: []))
         done["verify_0"] = ["type": "noul", "noul": 0.95]
-        XCTAssertEqual(JevPicker.interpret(done, context: context, elements: [])?.action.name, "done")
+        XCTAssertEqual(SystemOnePicker.interpret(done, context: context, elements: [])?.action.name, "done")
+    }
+
+    func testLayaService() throws {
+        let laya = SystemOnePicker.Service.laya(try XCTUnwrap(URL(string: "http://10.0.0.243:8000")))
+        XCTAssertEqual(laya.url.absoluteString, "http://10.0.0.243:8000/v1/systemone")
+        let body = SystemOnePicker.body(context, elements: reading.elements, model: laya.model)
+        XCTAssertEqual(body["model"] as? String, "typed-decisions")
+        XCTAssertLessThan(laya.maxElements, 100)  // the server caps a choice at 100 options, NONE included
+    }
+
+    func testLayaGateIsStricterAndTagsSteps() throws {
+        let laya = SystemOnePicker.Service.laya(try XCTUnwrap(URL(string: "http://mac.local:8000")))
+        let jevSure: [String: Any] = [
+            "operation": choice("TAP", ["TAP": 0.7, "WAIT": 0.3], confidence: 0.7),
+            "tap_target": choice("e1", ["e1": 0.8, "e2": 0.1, "NONE": 0.1], confidence: 0.8),
+        ]
+        XCTAssertNotNil(SystemOnePicker.interpret(jevSure, context: context, elements: reading.elements, service: .jev))
+        XCTAssertNil(SystemOnePicker.interpret(jevSure, context: context, elements: reading.elements, service: laya))
+        let sure: [String: Any] = [
+            "operation": choice("TAP", ["TAP": 0.95, "WAIT": 0.05], confidence: 0.95),
+            "tap_target": choice("e2", ["e2": 0.9, "e1": 0.05, "NONE": 0.05], confidence: 0.9),
+        ]
+        let decision = SystemOnePicker.interpret(sure, context: context, elements: reading.elements, service: laya)
+        XCTAssertEqual(decision?.source, "laya")
+        XCTAssertEqual(decision?.action, .tap(element: 2, at: reading.elements[1].center))
     }
 
     // MARK: Safety
