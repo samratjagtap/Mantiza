@@ -88,6 +88,77 @@ import Observation
         }
     }
 
+    /// Replay a learned workflow: repeat its recorded steps by finding each target's text on screen, without asking
+    /// the AI; when the screen does not match (or the check fails at the end), the normal AI loop takes over.
+    func replay(_ w: Workflow, deps: Deps) async -> Outcome {
+        self.deps = deps
+        steps = []; outcome = nil; history = []; subtask = w.subtask
+        say("Replaying \(w.name)")
+        Log.event("run.start", ["request": w.request, "workflow": w.id.uuidString])
+        do {
+            try await startApp(w.subtask)
+            var lastAction = Date()
+            for (i, step) in w.steps.enumerated() {
+                if deps.shouldStop() { return finish(.stopped) }
+                deps.progress(i + 1, w.steps.count, "Replaying step \(i + 1)")
+                let started = Date()
+                let frame = try await deps.screen.settled(after: lastAction)
+                let reading = try await OCR.read(frame)
+                if let why = Safety.stopReason(reading) { return finish(.blocked(why)) }
+                guard let done = try await replayStep(step, reading: reading, subtask: w.subtask) else {
+                    note("screen differs from the saved workflow at step \(i + 1); asking the AI", ms: 0, source: "replay")
+                    return finish(try await loop(w.subtask))
+                }
+                if !done { return finish(.blocked("You declined a step of the workflow.")) }
+                note("replay: \(step.kind) \(step.target ?? step.text ?? "")", ms: Self.ms(started), source: "replay",
+                     recorded: step)
+                history.append("replayed \(step.kind) \(step.target ?? step.text ?? "")")
+                lastAction = Date()
+            }
+            let frame = try await deps.screen.settled(after: lastAction)
+            let reading = try await OCR.read(frame)
+            let check = try await deps.big.verify(w.subtask, reading: reading, jpeg: frame.jpeg())
+            note("check: \(check.done ? "passed" : "failed") \(check.reason)", ms: 0, source: deps.big.name.lowercased().hasPrefix("claude") ? "claude" : "gemini")
+            if check.done { return finish(.done(check.reason)) }
+            return finish(try await loop(w.subtask))
+        } catch is CancellationError {
+            return finish(.stopped)
+        } catch {
+            return finish(.failed(error.localizedDescription))
+        }
+    }
+
+    /// One recorded step on the current screen. nil = the screen does not match; false = the user declined.
+    private func replayStep(_ step: RecordedAction, reading: ScreenReading, subtask s: Subtask) async throws -> Bool? {
+        let d = deps!
+        switch step.kind {
+        case "tap":
+            guard let label = step.target else { return nil }  // icons need the AI to find them again
+            let near = step.point ?? CGPoint(x: 0.5, y: 0.5)
+            guard let e = reading.find(label).min(by: { distance($0.center, near) < distance($1.center, near) }) else { return nil }
+            if let kind = Safety.risk(of: e) {
+                guard s.allowedRisks.contains(kind) else { return nil }
+                guard await d.approve("\(kind.capitalized): tap \(e.text)?") else { return false }
+            }
+            try await act { try await d.hands.tap(e.center) }
+        case "type":
+            guard let text = step.text, s.inputs.contains(text), !Safety.looksSecret(text) else { return nil }
+            try await act { try await d.hands.type(text) }
+        case "scroll_down", "scroll_up":
+            try await act { try await d.hands.scroll(down: step.kind == "scroll_down") }
+        case "back":
+            try await act { try await d.hands.swipe(from: CGPoint(x: 0.01, y: 0.5), to: CGPoint(x: 0.7, y: 0.5)) }
+        case "home":
+            try await act { try await d.hands.home() }
+        case "open_app":
+            guard let name = step.text else { return nil }
+            try await openApp(name)
+        default:
+            return nil
+        }
+        return true
+    }
+
     private func finish(_ o: Outcome) -> Outcome {
         outcome = o
         status = o.summary
@@ -110,6 +181,12 @@ import Observation
     }
 
     private func execute(_ s: Subtask) async throws -> Outcome {
+        try await startApp(s)
+        return try await loop(s)
+    }
+
+    /// Open the task's app: by fast path when it applies, else by URL scheme or Home Screen icon.
+    private func startApp(_ s: Subtask) async throws {
         let d = deps!
         let contacts = if let name = s.contact { await d.findContacts(name) } else { [FastPath.Match]() }
         if let fast = FastPath.url(for: s, contacts: contacts), await d.openURL(fast.url) {
@@ -120,6 +197,11 @@ import Observation
             say("Opening \(app)")
             try await openApp(app)
         }
+    }
+
+    /// Look -> decide -> act until the checks pass.
+    private func loop(_ s: Subtask) async throws -> Outcome {
+        let d = deps!
         var lastAction = Date()
         var before: Frame?           // the frame the last screen-changing action was taken on
         var lastSignature = ""       // action + target on that frame, to refuse a blind repeat

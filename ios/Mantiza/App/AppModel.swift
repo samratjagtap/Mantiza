@@ -13,6 +13,9 @@ import UIKit
     let approvals = Approvals()
     let live = LiveRun()
     let runs = RunStore()
+    let workflows = WorkflowStore()
+    /// The workflow shown as "Next" on the stick.
+    private(set) var suggestion: Workflow?
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
     let screen: ScreenSource
     var onboarded: Bool {
@@ -58,6 +61,7 @@ import UIKit
             if source != "stick" { Task { try? await self.channel.send(.unprompt(source == "phone" ? "Answered on phone" : "No answer")) } }
         }
         RunControl.stop = { [weak self] in self?.requestStop() }
+        link.onLinkUp = { [weak self] in Task { await self?.suggestNext() } }
         RunControl.answer = { [weak self] yes in self?.approvals.resolve(yes, source: "phone") }
         if mock == nil { link.start() }
         Log.event("app.start", ["mock": useMock, "onboarded": onboarded])
@@ -80,6 +84,12 @@ import UIKit
             approvals.resolve(false, source: "stick")
         case .yes: approvals.resolve(true, source: "stick")
         case .no, .timeout: approvals.resolve(false, source: "stick")
+        case .a:
+            // Run the suggestion. Screen sharing can only start with Mantiza in front.
+            guard let w = suggestion else { break }
+            if UIApplication.shared.applicationState == .active { Task { await run(w) } } else {
+                Notifier.tell("Open Mantiza to run “\(w.name)”.")
+            }
         default: break
         }
     }
@@ -92,39 +102,91 @@ import UIKit
         await approvals.ask(question)
     }
 
+    private func makeDeps() throws -> AgentRunner.Deps {
+        AgentRunner.Deps(
+            hands: hands, screen: screen, big: try AISettings.bigBrain(), fast: AISettings.fastBrain(),
+            approve: { [weak self] q in await self?.approve(q) ?? false },
+            shouldStop: { [weak self] in self?.stopRequested ?? true },
+            openURL: { url in
+                guard UIApplication.shared.applicationState == .active else { return false }
+                return await UIApplication.shared.open(url)
+            },
+            progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) },
+            findContacts: { await FastPath.findContacts($0) })
+    }
+
     /// Plan and run a request end to end.
     func run(_ request: String) async {
+        await perform(request: request, workflow: nil)
+    }
+
+    /// Run a saved workflow (replay, with the AI only where the screen differs).
+    func run(_ workflow: Workflow) async {
+        await perform(request: workflow.request, workflow: workflow)
+    }
+
+    private func perform(request: String, workflow: Workflow?) async {
+        guard !runner.running else { return }
         clearStop()
         let deps: AgentRunner.Deps
-        do {
-            deps = AgentRunner.Deps(
-                hands: hands, screen: screen, big: try AISettings.bigBrain(), fast: AISettings.fastBrain(),
-                approve: { [weak self] q in await self?.approve(q) ?? false },
-                shouldStop: { [weak self] in self?.stopRequested ?? true },
-                openURL: { url in
-                    guard UIApplication.shared.applicationState == .active else { return false }
-                    return await UIApplication.shared.open(url)
-                },
-                progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) },
-                findContacts: { await FastPath.findContacts($0) })
-        } catch {
+        do { deps = try makeDeps() } catch {
             _ = await runner.run(request, deps: AgentRunner.Deps(
                 hands: hands, screen: screen, big: MissingBrain(message: error.localizedDescription), fast: nil,
                 approve: { _ in false }, shouldStop: { true }, openURL: { _ in false }))
             return
         }
         let screen = self.screen
-        live.start(goal: request)
-        let outcome = await runner.run(request, deps: deps, prepare: {
-            if !screen.live { try await screen.start() }
-        })
+        live.start(goal: workflow?.name ?? request)
+        let outcome: AgentRunner.Outcome
+        if let workflow {
+            do {
+                if !screen.live { try await screen.start() }
+                outcome = await runner.replay(workflow, deps: deps)
+            } catch {
+                outcome = .failed(error.localizedDescription)
+            }
+        } else {
+            outcome = await runner.run(request, deps: deps, prepare: {
+                if !screen.live { try await screen.start() }
+            })
+        }
         live.end(outcome.summary)
+        let success = { if case .done = outcome { return true }; return false }()
         let record = RunRecord(request: request, plan: runner.subtask, steps: runner.steps, outcome: outcome.summary,
-                               success: { if case .done = outcome { return true }; return false }(),
-                               bigBrain: deps.big.name)
+                               success: success, bigBrain: deps.big.name, workflowID: workflow?.id)
         runs.save(record)
         lastRecord = record
+        if success, let workflow { workflows.used(workflow.id) }
         try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
+        await suggestNext()
+    }
+
+    /// Save the last successful run as a workflow.
+    @discardableResult
+    func saveLastAsWorkflow() -> Workflow? {
+        guard let r = lastRecord, let w = Workflow(from: r) else { return nil }
+        workflows.add(w)
+        Log.event("workflow.saved", ["name": w.name, "steps": w.steps.count])
+        Task { await suggestNext() }
+        return w
+    }
+
+    /// Show the best workflow for this time of day on the stick ("Next: ... A").
+    func suggestNext() async {
+        let next = workflows.suggestions().first
+        suggestion = next
+        _ = try? await channel.send(.next(next.map { String($0.name.prefix(24)) } ?? ""))
+    }
+
+    /// mantiza://run/<workflow id> (widget) and mantiza://run?text=<request>.
+    func open(_ url: URL) {
+        guard url.scheme == "mantiza", url.host == "run" else { return }
+        Log.event("deeplink", ["url": url.absoluteString])
+        if let id = UUID(uuidString: url.lastPathComponent), let w = workflows.workflow(id) {
+            Task { await run(w) }
+        } else if let text = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "text" })?.value {
+            Task { await run(text) }
+        }
     }
 
     /// Load the calibration saved for this screen size (call once a window exists).

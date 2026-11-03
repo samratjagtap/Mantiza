@@ -77,6 +77,14 @@ enum Notifier {
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
+    /// A plain message (no actions).
+    static func tell(_ text: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Mantiza"
+        content.body = text
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
     static func clearApproval() {
         let center = UNUserNotificationCenter.current()
         center.removeDeliveredNotifications(withIdentifiers: [id])

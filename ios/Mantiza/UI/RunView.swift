@@ -6,6 +6,7 @@ struct RunView: View {
     @State private var request = ""
     @State private var task: Task<Void, Never>?
     @State private var voice = VoiceInput()
+    @State private var savedID: UUID?
 
     var body: some View {
         let runner = app.runner
@@ -42,7 +43,16 @@ struct RunView: View {
                 }
             }
             if !runner.status.isEmpty {
-                Section("Status") { Text(runner.status) }
+                Section("Status") {
+                    Text(runner.status)
+                    if !runner.running, let r = app.lastRecord, r.success, r.workflowID == nil {
+                        if savedID == r.id {
+                            Label("Saved to Workflows", systemImage: "checkmark").foregroundStyle(.green)
+                        } else {
+                            Button("Save as a workflow") { if app.saveLastAsWorkflow() != nil { savedID = r.id } }
+                        }
+                    }
+                }
             }
             if let s = runner.subtask {
                 Section("Plan") {

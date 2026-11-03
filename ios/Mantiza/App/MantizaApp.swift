@@ -15,6 +15,7 @@ struct MantizaApp: App {
                     KeyStore.refreshRedaction()
                     Task { await Notifier.requestPermission() }
                 }
+                .onOpenURL { app.open($0) }
         }
     }
 }
@@ -35,7 +36,7 @@ struct MainTabs: View {
     var body: some View {
         TabView {
             Tab("Run", systemImage: "sparkles") { NavigationStack { RunView() } }
-            Tab("Runs", systemImage: "clock.arrow.circlepath") { NavigationStack { RunsView() } }
+            Tab("Workflows", systemImage: "square.stack.3d.up") { NavigationStack { WorkflowsView() } }
             Tab("Device", systemImage: "cursorarrow.rays") { NavigationStack { DeviceView() } }
             Tab("Look", systemImage: "eye") { NavigationStack { EyesView() } }
             Tab("Settings", systemImage: "gearshape") { NavigationStack { SettingsView() } }
