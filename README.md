@@ -13,6 +13,8 @@ This repo currently holds the planning docs. Mantiza uses Google's [Artemis](htt
 | Tech stack | [tech-stack.md](Docs/Mantiza%20Roadmap/tech-stack.md) | [tech-stack.md](Docs/Google%20Artemis%20Analysis/tech-stack.md) |
 | Roadmap and phases | [roadmap.md](Docs/Mantiza%20Roadmap/roadmap.md) | [roadmap.md](Docs/Google%20Artemis%20Analysis/roadmap.md) |
 
+Setting up a Mac to build the iPhone app? Follow [MacBook setup](Docs/Setup/macbook-setup.md).
+
 New here? Start with the [Mantiza plan](Docs/Mantiza%20Roadmap/plan.md). Unfamiliar terms are explained in the [glossary](Docs/Mantiza%20Roadmap/glossary.md).
 
 ## 📱 Set up your iPhone for Mantiza
