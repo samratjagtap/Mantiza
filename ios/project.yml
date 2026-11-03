@@ -46,6 +46,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: MantizaWidgets/Info.plist
         SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: $(MANTIZA_WIDGET_ENTITLEMENTS)
   MantizaTests:
     type: bundle.unit-test
     platform: iOS

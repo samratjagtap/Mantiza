@@ -171,11 +171,23 @@ import UIKit
         return w
     }
 
-    /// Show the best workflow for this time of day on the stick ("Next: ... A").
+    /// Show the best workflow for this time of day on the stick ("Next: ... A") and refresh the widget.
     func suggestNext() async {
+        publishWidget()
         let next = workflows.suggestions().first
         suggestion = next
         _ = try? await channel.send(.next(next.map { String($0.name.prefix(24)) } ?? ""))
+    }
+
+    /// Write the widget's tabs into the App Group.
+    func publishWidget() {
+        func item(_ w: Workflow) -> WidgetSnapshot.Item { .init(id: w.id.uuidString, name: w.name, app: w.subtask.app) }
+        var snap = WidgetSnapshot()
+        snap.tabs[.now] = workflows.suggestions(limit: 6).map(item)
+        snap.tabs[.pinned] = workflows.workflows.filter(\.pinned).map(item)
+        snap.tabs[.recent] = workflows.workflows.sorted { ($0.uses.last ?? $0.created) > ($1.uses.last ?? $1.created) }
+            .prefix(6).map(item)
+        snap.save()
     }
 
     /// mantiza://run/<workflow id> (widget) and mantiza://run?text=<request>.

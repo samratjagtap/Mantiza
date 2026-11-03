@@ -7,6 +7,7 @@ import WidgetKit
 struct MantizaWidgets: WidgetBundle {
     var body: some Widget {
         RunLiveActivity()
+        WorkflowWidget()
     }
 }
 

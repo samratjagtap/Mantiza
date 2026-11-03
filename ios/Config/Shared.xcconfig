@@ -9,8 +9,10 @@ MANTIZA_BUNDLE_ID = com.azadjagtap.mantiza
 // through that sheet, so it is a per-build choice. 0 = Core Bluetooth scan list (the known-working path).
 MANTIZA_ASK = 0
 
-// Entitlements file, empty by default so a Personal Team can always sign.
-MANTIZA_ENTITLEMENTS =
+// Entitlements (App Group shared with the widget). Set both to empty if your team cannot sign App Groups;
+// the widget then falls back to its configuration intent.
+MANTIZA_ENTITLEMENTS = Mantiza/Mantiza.entitlements
+MANTIZA_WIDGET_ENTITLEMENTS = MantizaWidgets/MantizaWidgets.entitlements
 
 MARKETING_VERSION = 0.1
 CURRENT_PROJECT_VERSION = 1

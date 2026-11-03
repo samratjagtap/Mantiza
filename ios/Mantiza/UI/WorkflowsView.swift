@@ -40,6 +40,7 @@ struct WorkflowsView: View {
                 var copy = w
                 copy.pinned.toggle()
                 app.workflows.update(copy)
+                app.publishWidget()
                 refresh += 1
             } label: { Image(systemName: w.pinned ? "pin.fill" : "pin") }
                 .buttonStyle(.plain)
