@@ -19,7 +19,11 @@ import Observation
     private(set) var found: [Found] = []
     private(set) var scanning = false
     private(set) var connecting = false
-    private(set) var connected = false  // subscribed and ready for commands
+    private(set) var connected = false  // subscribed, authenticated and ready for commands
+    /// Subscribed; commands can go out (the auth handshake runs on this).
+    private(set) var transportReady = false
+    /// While a new pairing secret is being set: the code the stick shows, for the user to compare.
+    private(set) var pairingCode: String?
     private(set) var pairedID: UUID?
     private(set) var name = ""
     private(set) var status: BoardStatus?
@@ -56,7 +60,7 @@ import Observation
         ])
     }
 
-    var isConnected: Bool { connected }
+    var isConnected: Bool { transportReady }
     var inputReady: Bool { connected && status?.inputReady == true }
 
     // MARK: - scan / pair
@@ -104,7 +108,15 @@ import Observation
     /// "Mantiza Hands" in Settings > Bluetooth (apps cannot do that).
     func unpair() async {
         _ = try? await commands.send(.unpair)
+        if let id = pairedID { SessionAuth.store(nil, for: id) }
         forget()
+    }
+
+    /// Set a new pairing secret (after the user opened the pairing window on the stick).
+    func repairAuth() {
+        guard let id = pairedID, let p = peripheral, transportReady else { return }
+        SessionAuth.store(nil, for: id)
+        Task { await authenticate(p) }
     }
 
     /// Forget the stick in the app only.
@@ -165,7 +177,7 @@ import Observation
     // MARK: - BoardTransport
 
     func write(_ line: String) throws {
-        guard connected, let peripheral, let c = chars[BoardUUID.cmd] else { throw BoardError.notConnected }
+        guard transportReady, let peripheral, let c = chars[BoardUUID.cmd] else { throw BoardError.notConnected }
         let data = Data(line.utf8)
         let fast = data.count <= peripheral.maximumWriteValueLength(for: .withoutResponse)
             && c.properties.contains(.writeWithoutResponse) && peripheral.canSendWriteWithoutResponse
@@ -195,6 +207,8 @@ import Observation
         let was = connected
         connecting = false
         connected = false
+        transportReady = false
+        pairingCode = nil
         chars = [:]
         subscribed = []
         commands.linkDown()
@@ -207,15 +221,61 @@ import Observation
     private func ready(_ p: CBPeripheral) {
         connectDeadline?.cancel()
         stopScan()
-        connected = true
+        transportReady = true
         connecting = false
         lastError = ""
         pairedID = p.identifier
         UserDefaults.standard.set(p.identifier.uuidString, forKey: Self.pairedKey)
         commands.linkUp()
         startWatchdog()
-        Log.event("board.up", ["name": name, "mtu": p.maximumWriteValueLength(for: .withoutResponse) + 3])
-        onLinkUp?()
+        Task { await authenticate(p) }
+    }
+
+    /// Prove to the stick that this is the owner's app (firmware 0.3.0+): pair a secret the first time (the user
+    /// confirms the code on the stick), then answer its challenge and tag every following command.
+    private func authenticate(_ p: CBPeripheral) async {
+        let id = p.identifier
+        do {
+            let status = BoardStatus.decode(try await commands.send(.status))
+            if let state = status?.auth {
+                var secret = SessionAuth.secret(for: id)
+                if state == "none" || secret == nil {
+                    let fresh = SessionAuth.newSecret()
+                    pairingCode = SessionAuth.code(fresh)
+                    Log.event("board.pair_secret", ["code": pairingCode ?? ""])
+                    defer { pairingCode = nil }
+                    try await commands.send(.secret(SessionAuth.hex(fresh)))
+                    SessionAuth.store(fresh, for: id)
+                    secret = fresh
+                }
+                guard let secret, let nonce = SessionAuth.unhex(try await commands.send(.hello)) else {
+                    throw BoardError(kind: .refused, message: "The stick sent no challenge.")
+                }
+                try await commands.send(.auth(SessionAuth.answer(secret: secret, nonce: nonce)))
+                commands.signer = { SessionAuth.sign($0, secret: secret, nonce: nonce) }
+                if UserDefaults.standard.bool(forKey: "authSelfTest") {  // launch with -authSelfTest YES
+                    let signer = commands.signer
+                    commands.signer = nil
+                    let unsigned = await Result(catching: { try await commands.send(.park) })
+                    commands.signer = signer
+                    let signed = await Result(catching: { try await commands.send(.park) })
+                    Log.event("auth.selftest", ["unsigned_refused": (try? unsigned.get()) == nil,
+                                                "signed_ok": (try? signed.get()) != nil])
+                }
+            }
+            guard transportReady, p === peripheral else { return }
+            connected = true
+            lastError = ""
+            Log.event("board.up", ["name": name, "mtu": p.maximumWriteValueLength(for: .withoutResponse) + 3,
+                                   "auth": status?.auth != nil])
+            onLinkUp?()
+        } catch {
+            let text = error.localizedDescription
+            lastError = text.contains("locked") || text.contains("auth failed")
+                ? "This stick is paired with another copy of Mantiza. Hold A on the stick for 3 s, then tap Re-pair."
+                : text
+            Log.event("board.auth_failed", ["error": text])
+        }
     }
 }
 
@@ -309,7 +369,7 @@ extension BoardLink: CBPeripheralDelegate {
             guard c.isNotifying else { return }
             subscribed.insert(c.uuid)
             // Reading the encrypted status triggers pairing; the first answer marks the link ready.
-            if !connected, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]),
+            if !transportReady, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]),
                let status = chars[BoardUUID.status] { p.readValue(for: status) }
         }
     }
@@ -323,7 +383,7 @@ extension BoardLink: CBPeripheralDelegate {
                 commands.handle(String(decoding: value, as: UTF8.self))
             case BoardUUID.status:
                 guard let s = BoardStatus.decode(value) else { return }
-                if !connected, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]) { ready(p) }
+                if !transportReady, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]) { ready(p) }
                 let before = status?.inputReady
                 status = status?.merged(with: s) ?? s
                 if before != status?.inputReady { Log.event("board.hid", ["state": status?.hid ?? "?"]) }

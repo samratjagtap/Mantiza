@@ -12,6 +12,8 @@
 // Keys: type TEXT (US ASCII) | key COMBO (cmd+v, enter, shift+tab ...) | home | consumer NAME|0xNNNN
 // Board: ping | status | version | ui STATE [STEP/TOTAL] TEXT | next TEXT | ask SECONDS TEXT | pair | unpair
 //        prompt SECONDS TEXT (non-blocking ask; evt yes|no|timeout follows) | unprompt [TEXT]
+// Auth (BLE only; see session_auth.h): secret HEX64 | hello -> ok NONCE | auth HMAC_HEX; then every other BLE
+//   line carries " ~TAG" (HMAC of the line keyed by the session). ping, version, status need no tag.
 
 #include <M5Unified.h>
 #include <esp_task_wdt.h>
@@ -19,12 +21,13 @@
 #include "ble_link.h"
 #include "hands.h"
 #include "ui.h"
+#include "session_auth.h"
 
 #ifndef DEBUG_SERIAL
 #define DEBUG_SERIAL 0
 #endif
 
-const char *FIRMWARE_VERSION = "0.2.0";
+const char *FIRMWARE_VERSION = "0.3.0";
 const int WATCHDOG_MS = 8000;
 const uint32_t ASK_MAX_S = 120;
 const uint32_t PAIRING_WINDOW_MS = 120000;
@@ -42,14 +45,14 @@ const char *resetReason() {
 }
 
 String statusJson() {
-  char s[320];
+  char s[360];
   snprintf(s, sizeof s,
            "{\"fw\":\"%s\",\"up\":%lu,\"rst\":\"%s\",\"heap\":%u,\"hid\":\"%s\",\"hgen\":%lu,"
-           "\"batt\":%d,\"chg\":%s,\"pair\":%s,\"stop\":%lu,"
+           "\"batt\":%d,\"chg\":%s,\"pair\":%s,\"stop\":%lu,\"auth\":\"%s\","
            "\"ble\":{\"mtu\":%u,\"phy\":%u,\"rdrop\":%lu,\"hdrop\":%lu,\"n\":%d}}",
            FIRMWARE_VERSION, millis(), resetReason(), (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
            ble_hid_state(), (unsigned long)ble_hid_generation(), ui_battery(), ui_charging() ? "true" : "false",
-           ble_pairing_open() ? "true" : "false", (unsigned long)ui_stop_count(), ble_mtu(), ble_phy(),
+           ble_pairing_open() ? "true" : "false", (unsigned long)ui_stop_count(), auth_state(), ble_mtu(), ble_phy(),
            (unsigned long)ble_reply_drops(), (unsigned long)ble_hid_drops(), ble_peers());
   return s;
 }
@@ -72,10 +75,13 @@ String uiCommand(const String &arg) {
 }
 
 // Board-level commands from the app; everything else is a pointer/keyboard command for hands_run().
-String board(const String &line, const String &id) {
+String board(const String &line, const String &id, bool usb) {
   int sp = line.indexOf(' ');
   String cmd = sp < 0 ? line : line.substring(0, sp);
   String arg = sp < 0 ? "" : line.substring(sp + 1);
+  if (cmd == "hello") return "ok " + auth_hello();
+  if (cmd == "auth") return auth_check(arg) ? "ok" : "err auth failed";
+  if (cmd == "secret") return auth_set(arg);
   if (cmd == "ping") return "ok";
   if (cmd == "version") return String("ok ") + FIRMWARE_VERSION;
   if (cmd == "status") return String("ok ") + statusJson();
@@ -99,6 +105,7 @@ String board(const String &line, const String &id) {
   if (cmd == "unprompt") return ui_unprompt(arg.length() ? arg : String("Answered on phone")) ? "ok" : "ok ended";
   if (cmd == "unpair") {
     ble_reply(id + " ok");  // answer before the link goes down
+    auth_clear();
     ble_unpair();
     return "ok";            // for USB; over BLE the peers are gone, so this second reply is dropped
   }
@@ -120,9 +127,13 @@ void sendEvent(const String &event) {
   Serial.println("evt " + event);
 }
 
-String handle(const String &raw) {
+String handle(const String &raw, bool usb) {
   String line = raw;
   line.trim();
+  if (!usb && !auth_line(line)) {
+    int sp0 = line.indexOf(' ');
+    return (sp0 < 0 ? line : line.substring(0, sp0)) + " err auth";
+  }
   int sp = line.indexOf(' ');
   String id = sp < 0 ? line : line.substring(0, sp);
   String rest = sp < 0 ? "" : line.substring(sp + 1);
@@ -131,7 +142,7 @@ String handle(const String &raw) {
 #if DEBUG_SERIAL
   unsigned long started = millis();
 #endif
-  String reply = board(rest, id);
+  String reply = board(rest, id, usb);
 #if DEBUG_SERIAL
   Serial.printf("[%s] %s -> %s (%lu ms)\n", id.c_str(), rest.c_str(), reply.c_str(), millis() - started);
 #endif
@@ -152,6 +163,7 @@ void setup() {
   snprintf(suffix, sizeof suffix, "%02X%02X", mac[4], mac[5]);
   String name = "Mantiza Hands " + String(suffix);
   ui_begin(name);
+  auth_begin();
   ble_begin(name);
   xTaskCreatePinnedToCore(statusTask, "status", 4096, NULL, 1, NULL, 1);
   Serial.printf("boot %s fw %s: reset %s, free heap %u\n", name.c_str(), FIRMWARE_VERSION, resetReason(),
@@ -162,22 +174,25 @@ void loop() {
   static bool linked = false;
   esp_task_wdt_reset();
   hands_poll();
+  static int peers = 0;
   if (linked && !ble_connected()) {
     hands_release();  // the app may disconnect while the system keeps its HID connection
     ui_show(UI_IDLE, "");
   }
+  if (ble_peers() != peers) auth_reset();  // a central came or went: authenticate again
+  peers = ble_peers();
   linked = ble_connected();
 
   String event;
   while (ui_pop_event(event)) sendEvent(event);
 
   if (Serial.available()) {  // USB serial takes the same "<id> <command>" lines, for the Mac harness
-    String reply = handle(Serial.readStringUntil('\n'));
+    String reply = handle(Serial.readStringUntil('\n'), true);
     if (reply.length()) Serial.println(reply);
     return;
   }
   String line;
   if (!ble_pop_cmd(line, 50)) return;
-  String reply = handle(line);
+  String reply = handle(line, false);
   if (reply.length()) ble_reply(reply);
 }

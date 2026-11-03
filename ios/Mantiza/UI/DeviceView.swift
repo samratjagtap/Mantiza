@@ -18,8 +18,14 @@ struct DeviceView: View {
                     if let fw = s.fw { LabeledContent("Firmware", value: fw) }
                     if let drops = s.ble?.hdrop, drops > 0 { LabeledContent("Dropped input reports", value: "\(drops)") }
                 }
+                if let code = app.link.pairingCode {
+                    PairingCodeView(code: code)
+                }
                 if !app.link.lastError.isEmpty && app.mock == nil {
                     Text(app.link.lastError).font(.footnote).foregroundStyle(.red)
+                    if app.link.transportReady && !app.link.connected {
+                        Button("Re-pair with this app") { app.link.repairAuth() }
+                    }
                 }
             }
             if app.mock == nil && !app.link.connected {
@@ -105,6 +111,19 @@ struct OpenAssistiveTouchButton: View {
         }
         if failed {
             Text("Open Settings > Accessibility > Touch > AssistiveTouch > Devices.").font(.footnote)
+        }
+    }
+}
+
+/// Shown while the stick asks the user to confirm a new pairing secret.
+struct PairingCodeView: View {
+    let code: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Pairing code").font(.caption).foregroundStyle(.secondary)
+            Text(code).font(.system(size: 34, weight: .bold, design: .monospaced))
+            Text("If the stick shows the same code, press A on the stick.").font(.footnote)
         }
     }
 }

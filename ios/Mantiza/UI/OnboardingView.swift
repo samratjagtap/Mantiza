@@ -36,6 +36,8 @@ struct OnboardingView: View {
             Page(title: "Connect the stick", symbol: "antenna.radiowaves.left.and.right") {
                 Text("Turn on Mantiza Hands and keep it close. Tap it below, then allow pairing.")
                 List { StickPicker() }.frame(minHeight: 200).listStyle(.insetGrouped)
+                if let code = app.link.pairingCode { PairingCodeView(code: code) }
+                if !app.link.lastError.isEmpty { Text(app.link.lastError).font(.footnote).foregroundStyle(.red) }
                 if app.boardConnected { Label("Connected to \(app.boardName)", systemImage: "checkmark.circle.fill").foregroundStyle(.green) }
             }
         case .pointer:

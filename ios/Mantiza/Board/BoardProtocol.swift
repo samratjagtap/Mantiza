@@ -26,6 +26,8 @@ struct BoardStatus: Codable, Equatable {
     var chg: Bool?
     var pair: Bool?
     var stop: Int?
+    /// Session auth (firmware 0.3.0): none (no secret yet) | locked | ok.
+    var auth: String?
     var ble: BLE?
 
     /// The phone subscribed to the HID reports: the pointer and keyboard work.
@@ -40,7 +42,7 @@ struct BoardStatus: Codable, Equatable {
         var r = newer
         r.fw = newer.fw ?? fw; r.up = newer.up ?? up; r.rst = newer.rst ?? rst; r.heap = newer.heap ?? heap
         r.hid = newer.hid ?? hid; r.hgen = newer.hgen ?? hgen; r.batt = newer.batt ?? batt; r.chg = newer.chg ?? chg
-        r.pair = newer.pair ?? pair; r.stop = newer.stop ?? stop
+        r.pair = newer.pair ?? pair; r.stop = newer.stop ?? stop; r.auth = newer.auth ?? auth
         let a = ble ?? BLE(), b = newer.ble ?? BLE()
         r.ble = BLE(mtu: b.mtu ?? a.mtu, phy: b.phy ?? a.phy, rdrop: b.rdrop ?? a.rdrop, hdrop: b.hdrop ?? a.hdrop,
                     n: b.n ?? a.n)
@@ -101,6 +103,9 @@ enum BoardCommand {
     case prompt(seconds: Int, text: String)
     case unprompt(String)
     case pair, unpair
+    case hello
+    case auth(String)
+    case secret(String)
 
     enum UiState: String { case idle, run, done, error, info }
 
@@ -126,6 +131,9 @@ enum BoardCommand {
         case let .ask(seconds, text): return "ask \(min(max(seconds, 1), 120)) " + Self.oneLine(text)
         case let .prompt(seconds, text): return "prompt \(min(max(seconds, 1), 120)) " + Self.oneLine(text)
         case let .unprompt(text): return "unprompt " + Self.oneLine(text)
+        case .hello: return "hello"
+        case let .auth(mac): return "auth \(mac)"
+        case let .secret(hex): return "secret \(hex)"
         case .pair: return "pair"
         case .unpair: return "unpair"
         }

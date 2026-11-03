@@ -39,6 +39,8 @@ struct BoardError: LocalizedError, Equatable {
     /// Every command with its result and time, for the run log and the Mac e2e harness.
     var onSent: ((String, Result<String, Error>, Double) -> Void)?
     private(set) var links = 0
+    /// Adds the session tag to each line once the stick has authenticated this app (nil: send lines as they are).
+    var signer: ((String) -> String)?
     private let lock = AsyncLock()
     /// The board also answers the Mac harness over USB; start our ids far from its small ones.
     private var nextID = Int.random(in: 100_000...800_000)
@@ -52,6 +54,7 @@ struct BoardError: LocalizedError, Equatable {
 
     /// The link dropped: fail everything in flight.
     func linkDown() {
+        signer = nil
         let waiting = pending
         pending = [:]
         waiting.values.forEach { $0.resume(throwing: BoardError(kind: .linkLost, message: "Mantiza Hands disconnected.")) }
@@ -71,6 +74,7 @@ struct BoardError: LocalizedError, Equatable {
         case let .type(text): return 5 + 0.04 * Double(text.count)  // 2 edges x 15 ms per character
         case let .ask(seconds, _): return Double(min(max(seconds, 1), 120)) + 5
         case let .longPress(_, _, ms): return 5 + Double(ms) / 1000
+        case .secret: return 70  // waits for the user to confirm the code on the stick
         default: return 5
         }
     }
@@ -92,7 +96,8 @@ struct BoardError: LocalizedError, Equatable {
             let reply = try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { (c: CheckedContinuation<BoardReply, Error>) in
                     pending[id] = c
-                    do { try transport.write("\(id) \(line)") } catch {
+                    let raw = "\(id) \(line)"
+                    do { try transport.write(signer?(raw) ?? raw) } catch {
                         pending[id] = nil
                         c.resume(throwing: error)
                         return
