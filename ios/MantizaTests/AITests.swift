@@ -141,6 +141,32 @@ final class AITests: XCTestCase {
         XCTAssertEqual(decision?.action, .tap(element: 2, at: reading.elements[1].center))
     }
 
+    // MARK: Laya training rows
+
+    func testTrainingLabelsFromBigBrainDecisions() {
+        let e = reading.elements
+        XCTAssertEqual(TrainingLog.expected(.tap(element: 2, at: .zero), elements: e, inputs: [], checks: 1, verified: nil) as? [String: String],
+                       ["operation": "TAP", "tap_target": "e2"])
+        XCTAssertEqual(TrainingLog.expected(.tap(element: nil, at: .zero), elements: e, inputs: [], checks: 1, verified: nil) as? [String: String],
+                       ["operation": "NEEDS_AGENT"])
+        XCTAssertEqual(TrainingLog.expected(.type("I'm coming"), elements: e, inputs: ["I'm coming"], checks: 1, verified: nil) as? [String: String],
+                       ["operation": "TYPE_TEXT", "text_input": "t0"])
+        XCTAssertTrue(TrainingLog.expected(.done("ok"), elements: e, inputs: [], checks: 1, verified: false).isEmpty)
+        let done = TrainingLog.expected(.done("ok"), elements: e, inputs: [], checks: 2, verified: true)
+        XCTAssertEqual(done["operation"] as? String, "DONE")
+        XCTAssertEqual(done["verify_1"] as? Bool, true)
+    }
+
+    func testTrainingRowIsLayaJSONL() throws {
+        let row = try XCTUnwrap(TrainingLog.row(context, decision: .tap(element: 1, at: .zero), step: 3))
+        XCTAssertNil(row["model"])
+        XCTAssertNotNil(row["state"])
+        let questions = try XCTUnwrap(row["questions"] as? [String: Any])
+        let expected = try XCTUnwrap(row["expected"] as? [String: Any])
+        XCTAssertTrue(Set(expected.keys).isSubset(of: Set(questions.keys)))
+        XCTAssertNoThrow(try JSONSerialization.data(withJSONObject: row))
+    }
+
     // MARK: Safety
 
     func testRiskyButtonsAreHiddenUnlessAllowed() {

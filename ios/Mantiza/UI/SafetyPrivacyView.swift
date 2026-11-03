@@ -58,14 +58,14 @@ struct PrivacyView: View {
                 LabeledContent("Workflows", value: "\(app.workflows.workflows.count)")
                 LabeledContent("Approvals", value: "\(app.approvals.history.count)")
                 LabeledContent("API keys", value: "Keychain")
-                Text("Screen images are not saved; only the text of each step and its timing.")
+                Text("Screen images are not saved. Runs keep each step's text and timing; training examples keep the text read from each screen, so Laya on your Mac can learn from Claude's choices.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section {
                 Button("Delete all data", role: .destructive) { confirm = true }
                 if deleted { Label("Deleted", systemImage: "checkmark").foregroundStyle(.green) }
             } footer: {
-                Text("Removes runs, workflows, approvals, calibration and API keys from this iPhone.")
+                Text("Removes runs, training examples, workflows, approvals, calibration and API keys from this iPhone.")
             }
         }
         .navigationTitle("Privacy")

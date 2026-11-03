@@ -155,6 +155,7 @@ import UIKit
         let record = RunRecord(request: request, plan: runner.subtask, steps: runner.steps, outcome: outcome.summary,
                                success: success, bigBrain: deps.big.name, workflowID: workflow?.id)
         runs.save(record)
+        TrainingLog.save(runner.training, run: record.id, success: success)
         lastRecord = record
         if success, let workflow { workflows.used(workflow.id) }
         try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
@@ -205,6 +206,7 @@ import UIKit
     func deleteAllData() {
         runs.deleteAll()
         workflows.deleteAll()
+        TrainingLog.deleteAll()
         approvals.clearHistory()
         resetCalibration()
         KeyStore.Provider.allCases.forEach { KeyStore.set($0, nil) }

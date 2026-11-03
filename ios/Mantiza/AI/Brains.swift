@@ -49,6 +49,7 @@ enum AgentAction: Equatable {
         }
     }
 
+    var isDone: Bool { if case .done = self { return true }; return false }
     var finishes: Bool { if case .done = self { return true }; if case .blocked = self { return true }; return false }
 }
 

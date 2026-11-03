@@ -59,11 +59,13 @@ import Observation
 
     @ObservationIgnored private var deps: Deps!
     @ObservationIgnored private var history: [String] = []
+    /// Big-brain decisions as Laya training rows (TrainingLog), saved by the app when the run ends.
+    @ObservationIgnored private(set) var training: [[String: Any]] = []
 
     /// Plan the request with the big brain, then run it.
     func run(_ request: String, deps: Deps, prepare: () async throws -> Void = {}) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []
+        steps = []; outcome = nil; history = []; training = []
         say("Planning")
         Log.event("run.start", ["request": request])
         do {
@@ -82,7 +84,7 @@ import Observation
     /// Run an already planned subtask (tests and replayed workflows).
     func run(_ plan: Subtask, deps: Deps) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []; subtask = plan
+        steps = []; outcome = nil; history = []; training = []; subtask = plan
         do { return finish(try await execute(plan)) } catch is CancellationError { return finish(.stopped) } catch {
             return finish(.failed(error.localizedDescription))
         }
@@ -92,7 +94,7 @@ import Observation
     /// the AI; when the screen does not match (or the check fails at the end), the normal AI loop takes over.
     func replay(_ w: Workflow, deps: Deps) async -> Outcome {
         self.deps = deps
-        steps = []; outcome = nil; history = []; subtask = w.subtask
+        steps = []; outcome = nil; history = []; training = []; subtask = w.subtask
         say("Replaying \(w.name)")
         Log.event("run.start", ["request": w.request, "workflow": w.id.uuidString])
         do {
@@ -228,14 +230,17 @@ import Observation
             let (visible, hidden) = Safety.filter(reading, allowed: s.allowedRisks)
             var context = DecisionContext(subtask: s, reading: visible, jpeg: nil, history: history)
             var decision: Decision?
+            var teacher: DecisionContext?  // set when the big brain decided: its answer labels this screen
             if let fast = d.fast {
                 do { decision = try await fast.decide(context) } catch { Log.info("fast brain failed: \(error.localizedDescription)") }
             }
             if decision == nil {
                 context.jpeg = frame.jpeg()
                 decision = try await d.big.decide(context)
+                teacher = context
             }
             guard let decision else { continue }
+            if let teacher, !decision.action.isDone { learn(teacher, decision.action, step: actions + 1) }
             let thinkMs = Self.ms(decideStarted)
             say("Step \(actions + 1): \(decision.action.name)")
             _ = try? await d.hands.channel.send(.ui(.run, step: actions + 1, total: s.maxActions, text: decision.action.name))
@@ -245,6 +250,7 @@ import Observation
             switch decision.action {
             case let .done(why):
                 let check = try await d.big.verify(s, reading: reading, jpeg: frame.jpeg())
+                if let teacher { learn(teacher, decision.action, verified: check.done, step: actions) }
                 note("\(decision.source): done (\(why)); check: \(check.done ? "passed" : "failed") \(check.reason)", ms: thinkMs)
                 if check.done { return .done(check.reason) }
                 history.append("claimed done but the check failed: \(check.reason)")
@@ -352,6 +358,10 @@ import Observation
             }
         }
         return .blocked("Used all \(s.maxActions) steps without finishing.")
+    }
+
+    private func learn(_ c: DecisionContext, _ action: AgentAction, verified: Bool? = nil, step: Int) {
+        if let row = TrainingLog.row(c, decision: action, verified: verified, step: step) { training.append(row) }
     }
 
     /// A stick command that changes the phone. A timeout means it may or may not have happened, so the run
