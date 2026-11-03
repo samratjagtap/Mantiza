@@ -13,16 +13,22 @@ import Foundation
     var key: Data?
     private(set) var utterance: UInt32 = 0
     private var samples: [Int: [Int16]] = [:]
+    /// For the log: packets that arrived, and those that could not be read (no key, too short).
+    private(set) var arrived = 0
+    private(set) var unreadable = 0
 
     func begin(_ utt: UInt32) {
         utterance = utt
         samples = [:]
+        arrived = 0
+        unreadable = 0
     }
 
     func receive(_ packet: Data) {
+        arrived += 1
         guard let key, packet.count > Self.header,
               let plain = Self.decrypt(packet, key: key, utterance: utterance),
-              let (seq, pcm) = Self.decode(plain) else { return }
+              let (seq, pcm) = Self.decode(plain) else { unreadable += 1; return }
         samples[seq] = pcm
     }
 

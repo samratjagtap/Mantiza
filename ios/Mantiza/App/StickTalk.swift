@@ -6,6 +6,7 @@ import Observation
 @MainActor @Observable final class StickTalk {
     static let cancelWindow = 2.0
     static let resendRounds = 3
+    static let maxResend = 20
 
     let audio = StickAudio()
     private(set) var lastHeard = ""
@@ -63,12 +64,18 @@ import Observation
         guard utt == audio.utterance else { return }
         transcribing = true
         defer { transcribing = false }
-        // Packets still in flight, then ask again for lost ones.
+        // Packets still in flight, then ask again for a few lost ones. Many lost means the audio channel itself
+        // is not getting through, and asking packet by packet would take seconds for nothing.
         try? await Task.sleep(for: .milliseconds(250))
-        for _ in 0..<Self.resendRounds where !audio.missing(of: packets).isEmpty {
-            for seq in audio.missing(of: packets) { _ = try? await channel.send(.audio(utterance: utt, seq: seq)) }
+        Log.event("talk.received", ["utt": utt, "packets": packets, "arrived": audio.arrived, "unreadable": audio.unreadable,
+                                    "missing": audio.missing(of: packets).count, "key": audio.key != nil])
+        for _ in 0..<Self.resendRounds {
+            let lost = audio.missing(of: packets)
+            guard !lost.isEmpty, lost.count <= Self.maxResend, utt == audio.utterance else { break }
+            for seq in lost { _ = try? await channel.send(.audio(utterance: utt, seq: seq)) }
             try? await Task.sleep(for: .milliseconds(200))
         }
+        guard utt == audio.utterance else { return }  // a newer recording started meanwhile
         let missing = audio.missing(of: packets).count
         guard let buffer = audio.buffer(of: packets) else {
             Log.event("talk.lost", ["utt": utt, "missing": missing, "packets": packets])

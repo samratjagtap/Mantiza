@@ -354,6 +354,15 @@ extension BoardLink: CBCentralManagerDelegate {
 }
 
 extension BoardLink: CBPeripheralDelegate {
+    /// The stick's layout changed (a firmware update sends Service Changed): look up its services again.
+    nonisolated func peripheral(_ p: CBPeripheral, didModifyServices invalidated: [CBService]) {
+        MainActor.assumeIsolated {
+            guard p === peripheral else { return }
+            Log.event("board.services_changed", ["invalidated": invalidated.map(\.uuid.uuidString)])
+            p.discoverServices([BoardUUID.service, BoardUUID.audioService])
+        }
+    }
+
     nonisolated func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {
             guard p === peripheral else { return }
@@ -362,9 +371,9 @@ extension BoardLink: CBPeripheralDelegate {
                 return fail("This stick has no Mantiza service. Flash the Mantiza Hands firmware.")
             }
             p.discoverCharacteristics(BoardUUID.all, for: service)
-            if let audio = p.services?.first(where: { $0.uuid == BoardUUID.audioService }) {
-                p.discoverCharacteristics([BoardUUID.audio], for: audio)
-            }
+            let audio = p.services?.first(where: { $0.uuid == BoardUUID.audioService })
+            Log.event("board.services", ["audio": audio != nil, "all": (p.services ?? []).map(\.uuid.uuidString)])
+            if let audio { p.discoverCharacteristics([BoardUUID.audio], for: audio) }
         }
     }
 
@@ -373,6 +382,8 @@ extension BoardLink: CBPeripheralDelegate {
             guard p === peripheral else { return }
             if let error { return fail(error.localizedDescription) }
             if service.uuid == BoardUUID.audioService {  // optional: push-to-talk
+                Log.event("board.audio_chars", ["found": (service.characteristics ?? []).map(\.uuid.uuidString),
+                                                "props": (service.characteristics ?? []).map { Int($0.properties.rawValue) }])
                 for c in service.characteristics ?? [] where c.uuid == BoardUUID.audio { p.setNotifyValue(true, for: c) }
                 return
             }
@@ -393,6 +404,7 @@ extension BoardLink: CBPeripheralDelegate {
             if let error { return fail("Subscribing failed: \(error.localizedDescription)") }
             guard c.isNotifying else { return }
             subscribed.insert(c.uuid)
+            if c.uuid == BoardUUID.audio { Log.event("board.audio", ["subscribed": true]) }
             // Reading the encrypted status triggers pairing; the first answer marks the link ready.
             if !transportReady, subscribed.isSuperset(of: [BoardUUID.reply, BoardUUID.status]),
                let status = chars[BoardUUID.status] { p.readValue(for: status) }

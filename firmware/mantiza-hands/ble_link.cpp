@@ -7,6 +7,7 @@
 #include <atomic>
 #include <NimBLEDevice.h>
 #include <NimBLEHIDDevice.h>
+#include <Preferences.h>
 #include "nimble/nimble/host/include/host/ble_hs.h"
 #include "src/hid/report.h"
 
@@ -23,6 +24,10 @@ const uint32_t STATUS_TIMEOUT_MS = 500;    // a newer status replaces it a secon
 const int MBUF_DATA = MYNEWT_VAL(MSYS_1_BLOCK_SIZE) - 16;  // payload per block (16 B mbuf header)
 // Up to MAX_PEERS centrals at once: the phone's app, plus a Mac as a debug harness.
 const int MAX_PEERS = 2;
+// Bump when services or characteristics change. Bonded phones cache the attribute layout and only look again
+// after a Service Changed indication, which is sent once to each phone that connects after a layout change.
+const uint32_t GATT_LAYOUT = 2;  // 2: audio in its own service (0.4.0)
+static volatile bool layoutChanged;
 
 enum { CH_REPLY, CH_STATUS, CH_AUDIO, CH_MOUSE, CH_KEYBOARD, CH_CONSUMER, CH_COUNT };
 
@@ -159,6 +164,15 @@ class ServerCb : public NimBLEServerCallbacks {
     }
     if (p >= 0) encrypted[p] = ci.isEncrypted();
     logConn("security", ci);
+    if (layoutChanged && ci.isEncrypted() && ci.isBonded()) {
+      server->sendServiceChangedIndication();  // the phone discovers our services again
+      Preferences prefs;
+      prefs.begin("mantiza", false);
+      prefs.putUInt("gattv", GATT_LAYOUT);
+      prefs.end();
+      layoutChanged = false;
+      BLE_LOG("service changed sent (layout %lu)\n", (unsigned long)GATT_LAYOUT);
+    }
   }
 };
 
@@ -311,6 +325,12 @@ void ble_begin(const String &name) {
   NimBLEDevice::setCustomGapHandler(onGap);
 #endif
 
+  {
+    Preferences prefs;
+    prefs.begin("mantiza", true);
+    layoutChanged = prefs.getUInt("gattv", 0) != GATT_LAYOUT;
+    prefs.end();
+  }
   server = NimBLEDevice::createServer();
   server->setCallbacks(new ServerCb());
   NimBLEService *svc = server->createService(UUID("0600"));

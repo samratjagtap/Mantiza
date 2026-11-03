@@ -30,7 +30,7 @@
 #define DEBUG_SERIAL 0
 #endif
 
-const char *FIRMWARE_VERSION = "0.4.2";
+const char *FIRMWARE_VERSION = "0.4.3";
 const uint32_t APP_SILENT_MS = 8000;  // the app pings every 2 s while a task runs
 const int WATCHDOG_MS = 8000;
 const uint32_t ASK_MAX_S = 120;
