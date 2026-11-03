@@ -76,6 +76,7 @@ import UIKit
         RunControl.stop = { [weak self] id in if id == self?.runID { self?.requestStop() } }
         RunControl.pause = { [weak self] id in if id == self?.runID { self?.togglePause() } }
         LiveRun.endStale()
+        WorkflowRequests.handle = { [weak self] id in await self?.handleWorkflowRequest(id) ?? WorkflowRequests.unavailable }
         link.onLinkUp = { [weak self] in Task { await self?.suggestNext() } }
         RunControl.answer = { [weak self] yes in self?.approvals.resolve(yes, source: "phone") }
         link.onAudio = { [weak self] packet in
@@ -335,9 +336,11 @@ import UIKit
         var snap = WidgetSnapshot()
         snap.tabs[.now] = workflows.suggestions(limit: 6).map(item)
         snap.tabs[.pinned] = workflows.workflows.filter(\.pinned).map(item)
+        snap.all = workflows.workflows.map(item)
         snap.tabs[.recent] = workflows.workflows.sorted { ($0.uses.last ?? $0.created) > ($1.uses.last ?? $1.created) }
             .prefix(6).map(item)
         snap.save()
+        MantizaShortcuts.updateAppShortcutParameters()  // Siri learns the workflow names
     }
 
     /// mantiza://run/<workflow id> (widget) and mantiza://run?text=<request>.

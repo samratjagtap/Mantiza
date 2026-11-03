@@ -98,3 +98,27 @@ final class AgentCanvasTests: XCTestCase {
         XCTAssertEqual(Schemas.card["required"] as? [String], ["headline", "detail", "symbol"])
     }
 }
+
+final class IntentBridgeTests: XCTestCase {
+    func testNamesWhatIsMissingInOrder() {
+        func problem(running: Bool = false, stick: Bool = true, pointer: Bool = true, keys: Bool = true,
+                     live: Bool = true, active: Bool = false) -> String? {
+            AppModel.intentProblem(running: running, stick: stick, pointer: pointer, keys: keys, sessionLive: live, appActive: active)
+        }
+        XCTAssertNil(problem())
+        XCTAssertTrue(problem(stick: false, pointer: false)!.contains("isn't connected"))
+        XCTAssertTrue(problem(pointer: false)!.contains("pointer"))
+        XCTAssertTrue(problem(keys: false)!.contains("Anthropic key"))
+        XCTAssertTrue(problem(live: false)!.contains("Start session"))
+        XCTAssertNil(problem(live: false, active: true), "in front, the run can start sharing itself")
+        XCTAssertTrue(problem(running: true)!.contains("already"))
+    }
+
+    func testEntitiesComeFromSavedWorkflows() throws {
+        var snap = WidgetSnapshot()
+        snap.all = [.init(id: "1", name: "Morning coffee", app: "Uber Eats"), .init(id: "2", name: "Text Azad", app: "Messages")]
+        let back = try JSONDecoder().decode(WidgetSnapshot.self, from: JSONEncoder().encode(snap))
+        let names = back.all.map(WorkflowEntity.init).filter { $0.name.localizedCaseInsensitiveContains("coffee") }.map(\.name)
+        XCTAssertEqual(names, ["Morning coffee"])
+    }
+}

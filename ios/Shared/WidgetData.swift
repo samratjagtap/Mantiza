@@ -20,6 +20,8 @@ struct WidgetSnapshot: Codable, Equatable {
     }
 
     var tabs: [Tab: [Item]] = [:]
+    /// Every saved workflow (Siri and Shortcuts list these).
+    var all: [Item] = []
     var updated = Date()
 
     static let group = "group." + (Bundle.main.bundleIdentifier ?? "com.azadjagtap.mantiza")

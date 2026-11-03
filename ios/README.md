@@ -63,6 +63,30 @@ runs). On the Mac: `tools/laya/train.sh` pulls them, fine-tunes Laya, tests it o
 promotes it (served as model `mantiza` by `tools/laya/serve.sh`) when its gated accuracy is at least 95%.
 `tools/laya/install-agent.sh` keeps the server running at login.
 
+## When things go wrong
+
+- **Lost link:** if the stick, the pointer or screen sharing drops, the task pauses instead of failing. It waits up
+  to 5 minutes, tells you what to do when it needs you, then looks again and goes on without repeating the last
+  action.
+- **Stuck:** before giving up, the agent asks you (stick, phone, Live Activity) whether you fixed it by hand, at
+  most twice per task.
+- **Pause and add to a task:** A on the stick (or Pause on the Live Activity) pauses; A again goes on. Holding A
+  during a task and speaking adds an instruction to it.
+- **Unusable answers:** timeouts, cut-off and unreadable model answers are retried, and a repeated useless tap
+  gets one nudge.
+- **Old screenshots:** icon taps and typing wait for a current screen.
+- **Home:** if the Home key does nothing, Cmd+H and then a swipe up are tried.
+- **Rules:** the actor follows `Mantiza/Resources/playbook.md`, which is versioned and logged with each run.
+- **Diagnostics:** crash and hang reports from iOS are kept on the phone (Settings > Log). Shared runs are redacted.
+
+## Siri, Shortcuts and Control Center
+
+Say "Run <workflow> in Mantiza", use the Run a Mantiza Workflow action in Shortcuts, or add the Mantiza button
+to Control Center (runs the current suggestion). A session must be on, unless Mantiza is in front.
+
+Design ideas from boboabw/phone-agent (stale-frame gate, pause/amend, held-input watchdog, playbook rules) are
+written fresh here; code adapted from onehumanbeing/esp32-iphone-agent is listed in `THIRD_PARTY_NOTICES.md`.
+
 ## Tabs
 
 Run (text or voice request, live steps, save as a workflow), Workflows (saved runs, replay, pin), Device (stick,

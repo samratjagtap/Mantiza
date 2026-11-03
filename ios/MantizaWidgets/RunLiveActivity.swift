@@ -9,6 +9,7 @@ struct MantizaWidgets: WidgetBundle {
         RunLiveActivity()
         AgentCanvasWidget()
         WorkflowWidget()
+        RunSuggestionControl()
     }
 }
 
