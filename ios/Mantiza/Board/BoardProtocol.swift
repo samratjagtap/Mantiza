@@ -79,6 +79,7 @@ enum BoardEvent: String, Equatable {
     case b          // button B on the idle screen
     case stop       // B held, or shaken while working: emergency stop
     case pairing    // pairing window opened on the stick
+    case yes, no, timeout  // answer to a `prompt`
 }
 
 /// Commands in the firmware's vocabulary (mantiza-hands.ino). Pointer positions are 0...32767 per axis.
@@ -96,6 +97,9 @@ enum BoardCommand {
     case ui(UiState, step: Int = 0, total: Int = 0, text: String)
     case next(String)
     case ask(seconds: Int, text: String)
+    /// Non-blocking ask (firmware 0.2.0): answers at once, the choice follows as event yes / no / timeout.
+    case prompt(seconds: Int, text: String)
+    case unprompt(String)
     case pair, unpair
 
     enum UiState: String { case idle, run, done, error, info }
@@ -120,6 +124,8 @@ enum BoardCommand {
             return "ui \(state.rawValue)" + (total > 0 ? " \(step)/\(total)" : "") + (text.isEmpty ? "" : " " + Self.oneLine(text))
         case let .next(text): return "next " + Self.oneLine(text)
         case let .ask(seconds, text): return "ask \(min(max(seconds, 1), 120)) " + Self.oneLine(text)
+        case let .prompt(seconds, text): return "prompt \(min(max(seconds, 1), 120)) " + Self.oneLine(text)
+        case let .unprompt(text): return "unprompt " + Self.oneLine(text)
         case .pair: return "pair"
         case .unpair: return "unpair"
         }

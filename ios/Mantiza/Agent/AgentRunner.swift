@@ -38,6 +38,8 @@ import Observation
         var shouldStop: () -> Bool
         /// Open an app by URL while Mantiza is in front; false if not possible.
         var openURL: (URL) async -> Bool
+        /// Step n of at most m, and what it is doing (Live Activity).
+        var progress: (Int, Int, String) -> Void = { _, _, _ in }
     }
 
     private(set) var subtask: Subtask?
@@ -131,6 +133,7 @@ import Observation
             let thinkMs = Int(Date().timeIntervalSince(started) * 1000)
             say("Step \(actions + 1): \(decision.action.name)")
             _ = try? await d.hands.channel.send(.ui(.run, step: actions + 1, total: s.maxActions, text: decision.action.name))
+            d.progress(actions + 1, s.maxActions, Self.describe(decision.action, reading))
             actions += 1
 
             switch decision.action {
@@ -243,6 +246,23 @@ import Observation
     private func openApp(_ name: String) async throws {
         let d = deps!
         try await act { try await AppLauncher.open(name, hands: d.hands, screen: d.screen, openURL: d.openURL) }
+    }
+}
+
+extension AgentRunner {
+    /// Short words for the Live Activity: "Tapping “General”", "Typing", "Scrolling".
+    static func describe(_ a: AgentAction, _ r: ScreenReading) -> String {
+        switch a {
+        case let .tap(element, _): return "Tapping " + (element.flatMap(r.element).map { "“\($0.text)”" } ?? "an icon")
+        case .type: return "Typing"
+        case .scroll: return "Scrolling"
+        case .back: return "Going back"
+        case .home: return "Going home"
+        case let .openApp(name): return "Opening \(name)"
+        case .wait: return "Waiting for the screen"
+        case .done: return "Checking the result"
+        case .blocked: return "Stopping"
+        }
     }
 }
 

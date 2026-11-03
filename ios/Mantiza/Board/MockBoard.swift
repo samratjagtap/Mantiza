@@ -7,6 +7,8 @@ import Foundation
     var isConnected = true
     /// Answer for `ask` (approval on the stick): "yes", "no" or "timeout".
     var askAnswer = "yes"
+    /// Answer `prompt` with an event (false: leave it open, as if nobody pressed a button).
+    var answersPrompts = true
     /// Called for every command after the reply is queued, e.g. to move a fake screen along in tests.
     var onCommand: ((BoardCommandLine) -> Void)?
     var replyDelay: Duration = .milliseconds(5)
@@ -35,11 +37,15 @@ import Foundation
         case "ask": reply = "ok " + askAnswer
         default: reply = "ok"
         }
-        let delay = replyDelay
+        let delay = replyDelay, answer = askAnswer
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: delay)
             self?.commands.handle("\(command.id) \(reply)")
             self?.onCommand?(command)
+            if command.name == "prompt", self?.answersPrompts == true {
+                try? await Task.sleep(for: delay)
+                self?.commands.handle("evt \(answer)")
+            }
         }
     }
 }

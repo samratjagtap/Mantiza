@@ -10,6 +10,8 @@ import UIKit
     let hands: Hands
     let calibrator = Calibrator()
     let runner = AgentRunner()
+    let approvals = Approvals()
+    let live = LiveRun()
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
     let screen: ScreenSource
     var onboarded: Bool {
@@ -42,6 +44,18 @@ import UIKit
             case let .failure(error): Log.event("cmd", ["line": line, "ok": false, "ms": Int(ms), "error": error.localizedDescription])
             }
         }
+        approvals.onAsk = { [weak self] q in
+            guard let self else { return }
+            self.live.ask(q)
+            Task { try? await self.channel.send(.prompt(seconds: 60, text: q)) }
+        }
+        approvals.onResolve = { [weak self] _, source in
+            guard let self else { return }
+            self.live.answered()
+            if source != "stick" { Task { try? await self.channel.send(.unprompt(source == "phone" ? "Answered on phone" : "No answer")) } }
+        }
+        RunControl.stop = { [weak self] in self?.requestStop() }
+        RunControl.answer = { [weak self] yes in self?.approvals.resolve(yes, source: "phone") }
         if mock == nil { link.start() }
         Log.event("app.start", ["mock": useMock, "onboarded": onboarded])
     }
@@ -57,18 +71,22 @@ import UIKit
     func received(_ event: BoardEvent) {
         lastEvent = event
         Log.event("board.event", ["name": event.rawValue])
-        if event == .stop { stopRequested = true }
+        switch event {
+        case .stop:
+            stopRequested = true
+            approvals.resolve(false, source: "stick")
+        case .yes: approvals.resolve(true, source: "stick")
+        case .no, .timeout: approvals.resolve(false, source: "stick")
+        default: break
+        }
     }
 
     func clearStop() { stopRequested = false }
     func requestStop() { stopRequested = true }
 
-    /// Ask on the stick (A = yes, B = no); the phone may be showing another app.
+    /// Ask on the stick (A = yes, B = no), the Live Activity and a notification; the first answer counts.
     func approve(_ question: String) async -> Bool {
-        Log.event("approval.ask", ["text": question])
-        let answer = (try? await channel.send(.ask(seconds: 60, text: question))) ?? "error"
-        Log.event("approval.answer", ["answer": answer])
-        return answer == "yes"
+        await approvals.ask(question)
     }
 
     /// Plan and run a request end to end.
@@ -83,7 +101,8 @@ import UIKit
                 openURL: { url in
                     guard UIApplication.shared.applicationState == .active else { return false }
                     return await UIApplication.shared.open(url)
-                })
+                },
+                progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) })
         } catch {
             _ = await runner.run(request, deps: AgentRunner.Deps(
                 hands: hands, screen: screen, big: MissingBrain(message: error.localizedDescription), fast: nil,
@@ -91,9 +110,11 @@ import UIKit
             return
         }
         let screen = self.screen
-        _ = await runner.run(request, deps: deps, prepare: {
+        live.start(goal: request)
+        let outcome = await runner.run(request, deps: deps, prepare: {
             if !screen.live { try await screen.start() }
         })
+        live.end(outcome.summary)
         try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
     }
 

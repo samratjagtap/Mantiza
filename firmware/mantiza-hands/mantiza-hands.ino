@@ -4,13 +4,14 @@
 //
 // Protocol: one line per command, "<id> <command>", answered "<id> ok [result]" or "<id> err <why>".
 // The same lines work over the BLE cmd/reply characteristics and USB serial (115200). Unsolicited events
-// from the device are sent as "evt <name>" (a, b, stop, pairing).
+// from the device are sent as "evt <name>" (a, b, stop, pairing, yes, no, timeout).
 //
 // Pointer (absolute, x and y in 0..32767 across the whole screen):
 //   at X Y | wake | move DX DY | tap X Y [hold_ms] | longpress X Y [ms] | stroke X1 Y1 X2 Y2 N
 //   press | release | scroll V H | park
 // Keys: type TEXT (US ASCII) | key COMBO (cmd+v, enter, shift+tab ...) | home | consumer NAME|0xNNNN
 // Board: ping | status | version | ui STATE [STEP/TOTAL] TEXT | next TEXT | ask SECONDS TEXT | pair | unpair
+//        prompt SECONDS TEXT (non-blocking ask; evt yes|no|timeout follows) | unprompt [TEXT]
 
 #include <M5Unified.h>
 #include <esp_task_wdt.h>
@@ -23,7 +24,7 @@
 #define DEBUG_SERIAL 0
 #endif
 
-const char *FIRMWARE_VERSION = "0.1.0";
+const char *FIRMWARE_VERSION = "0.2.0";
 const int WATCHDOG_MS = 8000;
 const uint32_t ASK_MAX_S = 120;
 const uint32_t PAIRING_WINDOW_MS = 120000;
@@ -88,6 +89,14 @@ String board(const String &line, const String &id) {
     int answer = ui_ask(arg.substring(sp2 + 1), seconds * 1000);
     return answer == 1 ? "ok yes" : answer == 0 ? "ok no" : "ok timeout";
   }
+  if (cmd == "prompt") {  // like ask, but answers at once; the choice follows as evt yes|no|timeout
+    int sp2 = arg.indexOf(' ');
+    long seconds = sp2 < 0 ? 0 : arg.substring(0, sp2).toInt();
+    if (seconds < 1 || seconds > (long)ASK_MAX_S) return "err prompt needs SECONDS (1..120) TEXT";
+    ui_prompt(arg.substring(sp2 + 1), seconds * 1000);
+    return "ok";
+  }
+  if (cmd == "unprompt") return ui_unprompt(arg.length() ? arg : String("Answered on phone")) ? "ok" : "ok ended";
   if (cmd == "unpair") {
     ble_reply(id + " ok");  // answer before the link goes down
     ble_unpair();

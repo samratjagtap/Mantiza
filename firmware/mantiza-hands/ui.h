@@ -12,10 +12,15 @@ void ui_set_next(const String &suggestion);  // "Next: ..." line on the idle scr
 // Ask the user on the device: 1 = A (yes), 0 = B (no) or stopped, -1 = timeout. Blocks, feeding the watchdog.
 int ui_ask(const String &text, uint32_t timeout_ms);
 
+// Ask without blocking: the answer arrives as event "yes", "no" (B or stop) or "timeout"; ui_unprompt withdraws
+// it (answered elsewhere, e.g. on the phone) and returns false if it had already ended.
+void ui_prompt(const String &text, uint32_t timeout_ms);
+bool ui_unprompt(const String &text);
+
 bool ui_stop_requested();   // latched until ui_clear_stop()
 void ui_clear_stop();
 uint32_t ui_stop_count();
-bool ui_pop_event(String &event);  // "a", "b", "stop", "pairing" for the app
+bool ui_pop_event(String &event);  // "a", "b", "stop", "pairing", "yes", "no", "timeout" for the app
 
 int ui_battery();     // percent, -1 if unknown
 bool ui_charging();

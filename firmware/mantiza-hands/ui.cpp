@@ -17,6 +17,10 @@ static int progStep, progTotal;
 static volatile bool dirty = true, stopLatched;
 static volatile uint32_t stopCount;
 static volatile int askAnswer = -1;  // -1 waiting, 0 no, 1 yes
+// Non-blocking prompt (ui_prompt): the answer goes out as an event, the app can withdraw it.
+static volatile bool prompting;
+static volatile uint32_t promptDeadline;
+static UiState promptBefore = UI_IDLE;
 static volatile int battery = -1;
 static volatile bool charging;
 static uint32_t lastActivity;
@@ -122,6 +126,12 @@ static void uiTask(void *) {
     if (state == UI_ASK) {
       if (M5.BtnA.wasClicked()) { askAnswer = 1; beep(2000, 60); }
       if (M5.BtnB.wasClicked()) { askAnswer = 0; beep(800, 60); }
+      if (prompting && (askAnswer >= 0 || (int32_t)(millis() - promptDeadline) >= 0)) {
+        int answer = askAnswer;
+        prompting = false;
+        pushEvent(answer == 1 ? "yes" : answer == 0 ? "no" : "timeout");
+        ui_show(promptBefore, answer == 1 ? "Approved" : answer == 0 ? "Cancelled" : "No answer");
+      }
     } else if (state == UI_RUN) {
       if (M5.BtnB.wasClicked() || M5.BtnB.wasHold()) requestStop();
     } else {
@@ -220,6 +230,22 @@ int ui_ask(const String &text, uint32_t timeout_ms) {
   int answer = askAnswer;
   ui_show(before == UI_ASK ? UI_IDLE : before, answer == 1 ? "Approved" : answer == 0 ? "Cancelled" : "No answer");
   return answer;
+}
+
+void ui_prompt(const String &text, uint32_t timeout_ms) {
+  if (!prompting) promptBefore = state == UI_ASK ? UI_IDLE : state;
+  askAnswer = -1;
+  promptDeadline = millis() + timeout_ms;
+  prompting = true;
+  ui_show(UI_ASK, text);
+  beep(1800, 100);
+}
+
+bool ui_unprompt(const String &text) {
+  if (!prompting) return false;
+  prompting = false;
+  ui_show(promptBefore, text);
+  return true;
 }
 
 bool ui_stop_requested() { return stopLatched; }
