@@ -55,6 +55,13 @@ enum KeyStore {
             set(p, String(decoding: data, as: UTF8.self))
             Log.event("keys.imported", ["provider": p.rawValue])
         }
+        let url = docs.appending(path: "import-laya.url")
+        if let text = try? String(contentsOf: url, encoding: .utf8) {
+            try? FileManager.default.removeItem(at: url)
+            AISettings.layaURL = text
+            AISettings.fast = .laya
+            Log.event("laya.url_imported", ["url": AISettings.layaURL])
+        }
         #endif
     }
 

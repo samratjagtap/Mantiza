@@ -30,7 +30,7 @@ struct SettingsView: View {
                     Text("Off").tag(AISettings.Fast.off)
                 }
                 if fast == .laya {
-                    TextField("http://10.0.0.243:8000", text: $layaURL)
+                    TextField("http://10.0.0.243:8765", text: $layaURL)
                         .keyboardType(.URL).autocorrectionDisabled().textInputAutocapitalization(.never)
                 }
             } header: {

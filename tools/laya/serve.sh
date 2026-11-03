@@ -1,12 +1,12 @@
 #!/bin/bash
 # Run Laya (convaiinnovations/laya, Apache-2.0) on this Mac as Mantiza's quick-step picker.
 # It answers POST /v1/systemone like TypeSafe's Jev. The phone reaches it over the same Wi-Fi.
-#   tools/laya/serve.sh           install on first run (PyTorch + ~0.8 GB checkpoint), then serve on port 8000
+#   tools/laya/serve.sh           install on first run (PyTorch + ~0.8 GB checkpoint), then serve on port 8765
 # Put the printed address and key into Mantiza > Settings > Quick steps and Keys > Laya server.
 set -euo pipefail
 DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV="$DIR/.venv"
-PORT="${LAYA_PORT:-8000}"
+PORT="${LAYA_PORT:-8765}"
 
 if [ ! -x "$VENV/bin/laya-serve" ]; then
   python3 -m venv "$VENV"

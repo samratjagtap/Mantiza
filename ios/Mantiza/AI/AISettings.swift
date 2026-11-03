@@ -27,7 +27,7 @@ enum AISettings {
         set { UserDefaults.standard.set(newValue.rawValue, forKey: "ai.fast") }
     }
 
-    /// Where tools/laya/serve.sh runs, e.g. http://10.0.0.243:8000 (the Mac's address on the same Wi-Fi).
+    /// Where tools/laya/serve.sh runs, e.g. http://10.0.0.243:8765 (the Mac's address on the same Wi-Fi).
     static var layaURL: String {
         get { UserDefaults.standard.string(forKey: "ai.layaURL") ?? "" }
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "ai.layaURL") }
