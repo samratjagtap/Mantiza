@@ -12,6 +12,8 @@ import Observation
     private(set) var transcribing = false
     /// A new request heard (and not cancelled).
     @ObservationIgnored var onRequest: ((String) -> Void)?
+    /// The recording led nowhere (lost, not understood, empty, cancelled).
+    @ObservationIgnored var onGaveUp: (() -> Void)?
     @ObservationIgnored private let channel: CommandChannel
     @ObservationIgnored private var waiter: CheckedContinuation<String?, Never>?
     @ObservationIgnored private var waiterID = UUID()
@@ -30,6 +32,8 @@ import Observation
             Task { await finish(utt, packets: packets) }
         case .b:
             cancelled = true
+        case .talkShort:
+            onGaveUp?()
         default: break
         }
     }
@@ -69,6 +73,7 @@ import Observation
         guard let buffer = audio.buffer(of: packets) else {
             Log.event("talk.lost", ["utt": utt, "missing": missing, "packets": packets])
             try? await channel.send(.ui(.error, text: "Didn't get that.|Hold A and try again."))
+            onGaveUp?()
             return
         }
         let started = Date()
@@ -76,6 +81,7 @@ import Observation
         do { text = try await Transcriber.transcribe(buffer) } catch {
             Log.event("talk.failed", ["error": error.localizedDescription])
             try? await channel.send(.ui(.error, text: "Couldn't understand.|\(error.localizedDescription)"))
+            onGaveUp?()
             return
         }
         Log.event("talk.heard", ["utt": utt, "chars": text.count, "seconds": Double(packets) * 0.032,
@@ -83,6 +89,7 @@ import Observation
         lastHeard = text
         guard !text.isEmpty else {
             try? await channel.send(.ui(.error, text: "Didn't catch that.|Hold A and try again."))
+            onGaveUp?()
             return
         }
         if waitingForAnswer {
@@ -96,6 +103,7 @@ import Observation
         if cancelled {
             try? await channel.send(.ui(.idle, text: ""))
             Log.event("talk.cancelled")
+            onGaveUp?()
             return
         }
         onRequest?(text)

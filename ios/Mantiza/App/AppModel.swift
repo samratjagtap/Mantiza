@@ -16,6 +16,8 @@ import UIKit
     let workflows = WorkflowStore()
     /// Push-to-talk on the stick.
     let talk: StickTalk
+    /// The full-screen agent widget.
+    let canvas = CanvasPublisher()
     /// The workflow shown as "Next" on the stick.
     private(set) var suggestion: Workflow?
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
@@ -56,11 +58,13 @@ import UIKit
         approvals.onAsk = { [weak self] q in
             guard let self else { return }
             self.live.ask(q)
+            self.canvas.update(now: true) { $0.phase = .waiting; $0.question = q }
             Task { try? await self.channel.send(.prompt(seconds: 60, text: q)) }
         }
         approvals.onResolve = { [weak self] _, source in
             guard let self else { return }
             self.live.answered()
+            self.canvas.update { $0.phase = .working; $0.question = nil }
             if source != "stick" { Task { try? await self.channel.send(.unprompt(source == "phone" ? "Answered on phone" : "No answer")) } }
         }
         RunControl.stop = { [weak self] in self?.requestStop() }
@@ -72,6 +76,10 @@ import UIKit
             talk.audio.receive(packet)
         }
         talk.onRequest = { [weak self] text in self?.requestFromStick(text) }
+        talk.onGaveUp = { [weak self] in
+            guard let self, canvas.canvas.phase == .listening else { return }
+            canvas.update(now: true) { $0.phase = .idle }
+        }
         if mock == nil { link.start() }
         Log.event("app.start", ["mock": useMock, "onboarded": onboarded])
     }
@@ -99,7 +107,10 @@ import UIKit
             if UIApplication.shared.applicationState == .active { Task { await run(w) } } else {
                 Notifier.tell("Open Mantiza to run “\(w.name)”.")
             }
-        case .b, .talkStart, .talkEnd, .talkShort:
+        case .talkStart:
+            if !runner.running { canvas.update(now: true) { $0.phase = .listening; $0.question = nil } }
+            talk.handle(event)
+        case .b, .talkEnd, .talkShort:
             talk.handle(event)
         default: break
         }
@@ -112,6 +123,7 @@ import UIKit
     func startSession() async {
         do {
             try await screen.start()
+            canvas.update(now: true) { $0.session = true }
             try? await channel.send(.ui(.info, text: "Ready.|Hold A to talk."))
             Log.event("session.start")
         } catch {
@@ -121,6 +133,7 @@ import UIKit
 
     func stopSession() async {
         await screen.stop()
+        canvas.update(now: true) { $0.session = false }
         try? await channel.send(.ui(.info, text: "Session ended.|Open Mantiza to start again."))
         Log.event("session.stop")
     }
@@ -134,6 +147,7 @@ import UIKit
             !screen.live && !active ? "Open Mantiza and tap|Start session." : nil
         if let problem {
             Log.event("talk.refused", ["why": problem])
+            if canvas.canvas.phase == .listening { canvas.update(now: true) { $0.phase = .idle } }
             Task { try? await channel.send(.ui(.error, text: problem)) }
             if !screen.live && !active { Notifier.tell("Tap to open Mantiza and start a session, then talk to the stick.") }
             return
@@ -159,10 +173,22 @@ import UIKit
                 guard UIApplication.shared.applicationState == .active else { return false }
                 return await UIApplication.shared.open(url)
             },
-            progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) },
+            progress: { [weak self] step, total, action in
+                guard let self else { return }
+                live.progress(step: step, total: total, action: action)
+                let steps = runner.steps.suffix(6).map { AgentCanvas.Step(id: $0.id, text: $0.text) }
+                canvas.update(thumbnail: screen.latest) {
+                    $0.phase = .working; $0.question = nil
+                    $0.step = step; $0.total = total; $0.status = action; $0.steps = steps
+                }
+            },
             findContacts: { await FastPath.findContacts($0) },
             askUser: { [weak self] question in
-                await self?.talk.ask(question)
+                guard let self else { return nil }
+                canvas.update(now: true) { $0.phase = .waiting; $0.question = question }
+                let answer = await talk.ask(question)
+                canvas.update { $0.phase = .working; $0.question = nil }
+                return answer
             })
     }
 
@@ -188,6 +214,10 @@ import UIKit
         }
         let screen = self.screen
         live.start(goal: workflow?.name ?? request)
+        canvas.update(now: true) {
+            $0.phase = .working; $0.request = workflow?.name ?? request; $0.status = "Planning"
+            $0.step = 0; $0.total = 0; $0.steps = []; $0.card = nil; $0.question = nil; $0.session = screen.live
+        }
         let outcome: AgentRunner.Outcome
         if let workflow {
             do {
@@ -203,6 +233,7 @@ import UIKit
         }
         live.end(outcome.summary)
         let success = { if case .done = outcome { return true }; return false }()
+        await publishResult(outcome, success: success, brain: deps.big)
         let record = RunRecord(request: request, plan: runner.subtask, steps: runner.steps, outcome: outcome.summary,
                                success: success, bigBrain: deps.big.name, workflowID: workflow?.id)
         runs.save(record)
@@ -211,6 +242,22 @@ import UIKit
         if success, let workflow { workflows.used(workflow.id) }
         try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
         await suggestNext()
+    }
+
+    /// The widget's result card (written by the AI from the final screen when the task succeeded), also on the stick.
+    private func publishResult(_ outcome: AgentRunner.Outcome, success: Bool, brain: BigBrain) async {
+        var card = AgentCanvas.Card(headline: success ? "Done" : "Stopped", detail: outcome.summary,
+                                    symbol: success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+        if success, let s = runner.subtask, let frame = screen.latest, let reading = try? await OCR.read(frame),
+           let written = try? await brain.summarize(s, outcome: outcome.summary, reading: reading, jpeg: frame.jpeg()) {
+            card = written
+            _ = try? await channel.send(.ui(.done, text: card.headline + "|" + card.detail))
+        }
+        let steps = runner.steps.suffix(6).map { AgentCanvas.Step(id: $0.id, text: $0.text) }
+        canvas.update(now: true, thumbnail: screen.latest) {
+            $0.phase = success ? .done : .failed; $0.status = outcome.summary; $0.card = card
+            $0.steps = steps; $0.question = nil; $0.session = screen.live
+        }
     }
 
     /// Save the last successful run as a workflow.
@@ -234,6 +281,8 @@ import UIKit
     /// Write the widget's tabs into the App Group.
     func publishWidget() {
         func item(_ w: Workflow) -> WidgetSnapshot.Item { .init(id: w.id.uuidString, name: w.name, app: w.subtask.app) }
+        let suggestions = workflows.suggestions(limit: 3).map(item)
+        if suggestions != canvas.canvas.suggestions { canvas.update { $0.suggestions = suggestions } }
         var snap = WidgetSnapshot()
         snap.tabs[.now] = workflows.suggestions(limit: 6).map(item)
         snap.tabs[.pinned] = workflows.workflows.filter(\.pinned).map(item)
@@ -244,6 +293,10 @@ import UIKit
 
     /// mantiza://run/<workflow id> (widget) and mantiza://run?text=<request>.
     func open(_ url: URL) {
+        if url.scheme == "mantiza", url.host == "session" {  // from the agent widget
+            if !screen.live { Task { await startSession() } }
+            return
+        }
         guard url.scheme == "mantiza", url.host == "run" else { return }
         Log.event("deeplink", ["url": url.absoluteString])
         if let id = UUID(uuidString: url.lastPathComponent), let w = workflows.workflow(id) {

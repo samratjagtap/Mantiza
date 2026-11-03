@@ -34,6 +34,15 @@ struct ClaudeBrain: BigBrain {
         return (json["done"] as? Bool ?? false, json["reason"] as? String ?? "")
     }
 
+    func summarize(_ s: Subtask, outcome: String, reading: ScreenReading, jpeg: Data?) async throws -> AgentCanvas.Card {
+        let json = try await ask(system: Prompts.summary,
+                                 content: Self.content("Task: \(s.goal)\nOutcome: \(outcome)\nScreen text:\n\(reading.table)", jpeg),
+                                 schema: Schemas.card, maxTokens: 1000)
+        let symbol = json["symbol"] as? String ?? ""
+        return AgentCanvas.Card(headline: json["headline"] as? String ?? "Done", detail: json["detail"] as? String ?? outcome,
+                                symbol: Schemas.symbols.contains(symbol) ? symbol : "checkmark.circle.fill")
+    }
+
     static func content(_ text: String, _ jpeg: Data?) -> [[String: Any]] {
         var blocks: [[String: Any]] = []
         if let jpeg {
@@ -122,6 +131,17 @@ enum Schemas {
             "contact": nullable("string"),
         ],
         "required": ["goal", "app", "inputs", "verification", "allowed_risks", "max_actions", "contact"],
+        "additionalProperties": false,
+    ]
+
+    static let symbols = ["checkmark.circle.fill", "bag.fill", "fork.knife", "car.fill", "message.fill", "phone.fill",
+                          "map.fill", "calendar", "music.note", "envelope.fill", "gearshape.fill", "info.circle.fill"]
+
+    static let card: [String: Any] = [
+        "type": "object",
+        "properties": ["headline": ["type": "string"], "detail": ["type": "string"],
+                       "symbol": ["type": "string", "enum": symbols]],
+        "required": ["headline", "detail", "symbol"],
         "additionalProperties": false,
     ]
 

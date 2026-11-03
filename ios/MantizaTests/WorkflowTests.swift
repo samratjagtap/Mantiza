@@ -79,3 +79,22 @@ final class CountingBrain: BigBrain, @unchecked Sendable {
         XCTAssertEqual(WorkflowStore(file: file).workflows.count, 2)  // persisted
     }
 }
+
+final class AgentCanvasTests: XCTestCase {
+    func testCanvasRoundTripsThroughJSON() throws {
+        var c = AgentCanvas()
+        c.phase = .waiting
+        c.question = "Which size?"
+        c.steps = [.init(id: 1, text: "Opened Uber Eats")]
+        c.card = .init(headline: "Order placed", detail: "Arrives 7:40", symbol: "bag.fill")
+        let back = try JSONDecoder().decode(AgentCanvas.self, from: JSONEncoder().encode(c))
+        XCTAssertEqual(back, c)
+    }
+
+    func testResultCardSchemaOffersOnlyKnownSymbols() throws {
+        let props = try XCTUnwrap(Schemas.card["properties"] as? [String: Any])
+        let symbol = try XCTUnwrap(props["symbol"] as? [String: Any])
+        XCTAssertEqual(symbol["enum"] as? [String], Schemas.symbols)
+        XCTAssertEqual(Schemas.card["required"] as? [String], ["headline", "detail", "symbol"])
+    }
+}
