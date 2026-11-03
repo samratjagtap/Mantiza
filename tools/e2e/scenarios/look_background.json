@@ -1,0 +1,77 @@
+{
+  "name": "look_background",
+  "about": "M3 check: share the screen, open Settings through Spotlight from the background, read it and tap About (Settings on its General page).",
+  "steps": [
+    {
+      "screen_has": [
+        "What should Mantiza do?"
+      ],
+      "timeout": 15
+    },
+    {
+      "sleep": 1.5
+    },
+    {
+      "tap_text": "Look"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "tap_text": "Share screen"
+    },
+    {
+      "sleep": 2.5
+    },
+    {
+      "tap_text": "Share Entire Screen"
+    },
+    {
+      "event": "screen.start",
+      "timeout": 10
+    },
+    {
+      "hands": "tap 16383 2600"
+    },
+    {
+      "hands": "park"
+    },
+    {
+      "sleep": 1.5
+    },
+    {
+      "tap_text": "General"
+    },
+    {
+      "hands": "key cmd+a"
+    },
+    {
+      "hands": "type About"
+    },
+    {
+      "hands": "key enter"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "tap_text": "Open Settings"
+    },
+    {
+      "event": "eyes.tap",
+      "timeout": 30,
+      "where": {
+        "found": true
+      }
+    },
+    {
+      "screen_has": [
+        "iOS Version"
+      ],
+      "timeout": 8
+    },
+    {
+      "hands": "home"
+    }
+  ]
+}

@@ -98,3 +98,26 @@ struct ScriptedBrain: BigBrain, @unchecked Sendable {
         XCTAssertFalse(phone.board.sent.contains { $0.hasPrefix("type") })
     }
 }
+
+final class SpotlightTests: XCTestCase {
+    func testPicksTopMostResultNotSearchField() {
+        let r = ScreenReading(frameID: 1, elements: [
+            ScreenElement(id: 1, text: "Settings", box: CGRect(x: 0.2, y: 0.92, width: 0.2, height: 0.02)),
+            ScreenElement(id: 2, text: "System Settings", box: CGRect(x: 0.2, y: 0.13, width: 0.3, height: 0.02)),
+            ScreenElement(id: 3, text: "Settings", box: CGRect(x: 0.1, y: 0.2, width: 0.1, height: 0.02)),
+        ])
+        XCTAssertEqual(AppLauncher.spotlightHit("Settings", in: r)?.id, 3)
+        XCTAssertEqual(AppLauncher.spotlightHit("system", in: r)?.id, 2)
+        XCTAssertNil(AppLauncher.spotlightHit("Maps", in: r))
+    }
+
+    func testIconLabelsIncludingTruncated() {
+        let r = ScreenReading(frameID: 1, elements: [
+            ScreenElement(id: 1, text: "Google Ma...", box: CGRect(x: 0.4, y: 0.3, width: 0.2, height: 0.02)),
+            ScreenElement(id: 2, text: "Notes", box: CGRect(x: 0.1, y: 0.5, width: 0.1, height: 0.02)),
+        ])
+        XCTAssertEqual(AppLauncher.iconHit("Google Maps", in: r)?.id, 1)
+        XCTAssertLessThan(AppLauncher.iconHit("notes", in: r)!.center.y, 0.5)
+        XCTAssertNil(AppLauncher.iconHit("Go", in: r))
+    }
+}

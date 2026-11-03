@@ -8,6 +8,7 @@ struct EyesView: View {
     @State private var frame: Frame?
     @State private var message = ""
     @State private var query = "General"
+    @State private var appName = "Settings"
     @State private var busy = false
 
     var body: some View {
@@ -26,8 +27,9 @@ struct EyesView: View {
                 Text("After sharing starts, go to another app and back. Reading happens on this iPhone.")
             }
             Section("Tap by text") {
+                TextField("App", text: $appName).autocorrectionDisabled()
                 TextField("Text on screen", text: $query).autocorrectionDisabled()
-                Button("Go Home, then tap “\(query)” in the app you left") {
+                Button("Open \(appName), then tap “\(query)”") {
                     act { try await tapFromHome() }
                 }
                 .disabled(!app.screen.live || !app.inputReady || query.isEmpty)
@@ -77,19 +79,18 @@ struct EyesView: View {
         message = "Tapped \(e.text)."
     }
 
-    /// Leave Mantiza, read the app underneath, tap the element whose text matches.
+    /// Leave Mantiza, open the app through Spotlight, read it, tap the element whose text matches.
     private func tapFromHome() async throws {
-        let left = Date()
-        try await app.hands.home()
-        try await Task.sleep(for: .seconds(1))
-        try await app.hands.key("cmd+tab")  // back to the previous app (App Switcher via keyboard)
-        let f = try await app.screen.settled(after: left)
+        try await AppLauncher.open(appName, hands: app.hands, screen: app.screen, openURL: { url in
+            await UIApplication.shared.open(url)
+        })
+        let f = try await app.screen.settled(after: Date().addingTimeInterval(-0.2), quiet: 0.4, most: 3)
         let r = try await OCR.read(f)
         frame = f
         reading = r
         guard let target = r.find(query).first else {
             message = "“\(query)” is not on screen. Seen: \(r.elements.prefix(8).map(\.text).joined(separator: ", "))"
-            Log.event("eyes.tap", ["query": query, "found": false])
+            Log.event("eyes.tap", ["query": query, "found": false, "seen": r.elements.prefix(12).map(\.text)])
             return
         }
         let before = Date()
@@ -103,7 +104,10 @@ struct EyesView: View {
     private func act(_ work: @escaping () async throws -> Void) {
         busy = true
         Task {
-            do { try await work() } catch { message = error.localizedDescription }
+            do { try await work() } catch {
+                message = error.localizedDescription
+                Log.event("eyes.error", ["message": message])
+            }
             busy = false
         }
     }

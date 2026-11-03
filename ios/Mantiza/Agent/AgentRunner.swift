@@ -239,23 +239,65 @@ import Observation
         }
     }
 
-    /// Open an app: its URL scheme while Mantiza is in front, otherwise Spotlight via the keyboard.
+    /// Open an app: its URL scheme while Mantiza is in front, otherwise its Home Screen icon.
     private func openApp(_ name: String) async throws {
         let d = deps!
-        if let url = AppLinks.url(for: name), await d.openURL(url) {
+        try await act { try await AppLauncher.open(name, hands: d.hands, screen: d.screen, openURL: d.openURL) }
+    }
+}
+
+@MainActor enum AppLauncher {
+    static let maxPages = 6
+
+    /// Open an app: URL scheme when Mantiza is in front (instant), else find its icon label on the Home Screen
+    /// pages. Spotlight is not used: iOS leaves it out of screen sharing, so its results cannot be read.
+    static func open(_ name: String, hands: Hands, screen: ScreenSource, openURL: (URL) async -> Bool) async throws {
+        if let url = AppLinks.url(for: name), await openURL(url) {
+            Log.event("launcher.url", ["app": name])
             try await Task.sleep(for: .seconds(1))
             return
         }
-        try await act {
-            try await d.hands.home()
-            try await Task.sleep(for: .milliseconds(600))
-            try await d.hands.key("cmd+space")
-            try await Task.sleep(for: .milliseconds(600))
-            try await d.hands.type(name)
-            try await Task.sleep(for: .milliseconds(500))
-            try await d.hands.key("enter")
+        try await hands.home()
+        try await Task.sleep(for: .milliseconds(500))
+        try await hands.home()  // a second press goes to the first Home Screen page
+        var last: Frame?
+        for page in 0..<maxPages {
+            let frame = try await screen.settled(after: Date().addingTimeInterval(-0.1), quiet: 0.4, most: 2)
+            let reading = try await OCR.read(frame)
+            if let icon = iconHit(name, in: reading) {
+                Log.event("launcher.hit", ["app": name, "page": page, "text": icon.text])
+                try await hands.tap(icon.center)
+                try await Task.sleep(for: .seconds(1))
+                return
+            }
+            if let last, !ScreenDiff.changed(last.image, frame.image) { break }  // past the last page
+            last = frame
+            try await hands.swipe(from: CGPoint(x: 0.85, y: 0.5), to: CGPoint(x: 0.15, y: 0.5), steps: 20)
+            try await Task.sleep(for: .milliseconds(400))
         }
-        try await Task.sleep(for: .seconds(1))
+        Log.event("launcher.miss", ["app": name])
+        throw AIError("Could not find the \(name) app on the Home Screen.")
+    }
+
+    /// An app icon's label: exact (case-insensitive) match, or a truncated label ("Google Ma...") that starts
+    /// the name. Labels sit below their icons, so the tap goes a little above the text.
+    nonisolated static func iconHit(_ name: String, in reading: ScreenReading) -> ScreenElement? {
+        let q = name.lowercased()
+        let match = reading.elements.first { $0.text.lowercased() == q } ?? reading.elements.first { e in
+            let t = e.text.lowercased().replacingOccurrences(of: "...", with: "").replacingOccurrences(of: "…", with: "")
+                .trimmingCharacters(in: .whitespaces)
+            return t.count >= 4 && q.hasPrefix(t)
+        }
+        guard var hit = match else { return nil }
+        hit.box = hit.box.offsetBy(dx: 0, dy: -0.035)  // the icon, not its label
+        return hit
+    }
+
+    /// The Spotlight result for an app: top-most exact match, else top-most containing match, above the search field.
+    nonisolated static func spotlightHit(_ name: String, in reading: ScreenReading) -> ScreenElement? {
+        let above = reading.elements.filter { $0.center.y < 0.85 }.sorted { $0.center.y < $1.center.y }
+        let q = name.lowercased()
+        return above.first { $0.text.lowercased() == q } ?? above.first { $0.text.lowercased().contains(q) }
     }
 }
 

@@ -34,10 +34,11 @@ import Foundation
         try await channel.send(.park)
     }
 
-    /// Scroll the content so later items come into view (a finger swipe up on the middle of the screen).
+    /// Scroll the content by about a quarter screen (a slow finger swipe in the middle: fast ones fling the
+    /// list past what we were looking for).
     func scroll(down: Bool) async throws {
-        let top = CGPoint(x: 0.5, y: 0.3), bottom = CGPoint(x: 0.5, y: 0.7)
-        try await swipe(from: down ? bottom : top, to: down ? top : bottom)
+        let top = CGPoint(x: 0.5, y: 0.4), bottom = CGPoint(x: 0.5, y: 0.65)
+        try await swipe(from: down ? bottom : top, to: down ? top : bottom, steps: 80)
     }
 
     /// Types US-ASCII text. Throws before typing anything if a character cannot be typed.

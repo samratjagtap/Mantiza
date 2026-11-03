@@ -14,7 +14,9 @@ Scenario file: {"name": ..., "steps": [step, ...]}, each step one of
     {"launch": true}                          (re)launch Mantiza (tools/e2e/phone.sh --launch)
     {"event": "board.up", "timeout": 20, "where": {"key": "value"}}   wait for an app event
     {"screen_has": ["General", "About"], "timeout": 10}               screenshot until all texts are visible
-    {"tap_text": "General"}                   screenshot, find the text, tap its centre with the stick
+    {"tap_text": "General", "above": 0.85}    screenshot, find the text (top-most, above y), tap it with the stick
+    {"back_until": ["General"], "max": 4}   tap "<" (or fling to the top) until all texts are visible
+    {"scroll_until": "General", "max": 4}   swipe up in the middle until the text is visible
     {"sleep": 1.5}
 Results go to tools/e2e/out/<scenario>-<time>/ (screenshots, events.jsonl, report.json).
 """
@@ -87,8 +89,10 @@ def read_text(path):
     return [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
 
 
-def find(texts, wanted):
+def find(texts, wanted, below_search=1.01):
+    """Top-most element with exactly this text (else containing it), above `below_search` (Spotlight: 0.85)."""
     w = wanted.lower()
+    texts = sorted((t for t in texts if t["y"] < below_search), key=lambda t: t["y"])
     exact = [t for t in texts if t["text"].lower() == w]
     return (exact or [t for t in texts if w in t["text"].lower()] or [None])[0]
 
@@ -126,7 +130,7 @@ def run(path):
                 ok, detail = not missing, f"missing {missing}" if missing else "all visible"
             elif "tap_text" in step:
                 shots += 1
-                hit = find(screenshot(os.path.join(out, f"{shots:03d}.png")), step["tap_text"])
+                hit = find(screenshot(os.path.join(out, f"{shots:03d}.png")), step["tap_text"], step.get("above", 1.01))
                 ok = hit is not None
                 if ok:
                     detail = hands.call(f"tap {int(hit['x'] * ABS_MAX)} {int(hit['y'] * ABS_MAX)}")
@@ -134,6 +138,31 @@ def run(path):
                     ok = detail.startswith("ok")
                 else:
                     detail = "text not on screen"
+            elif "back_until" in step:
+                ok, detail = False, "never visible"
+                for _ in range(step.get("max", 4) + 1):
+                    shots += 1
+                    texts = screenshot(os.path.join(out, f"{shots:03d}.png"))
+                    if all(find(texts, w) for w in step["back_until"]):
+                        ok, detail = True, "visible"
+                        break
+                    back = next((t for t in texts if t["text"].strip() in ("<", "‹") and t["y"] < 0.12), None)
+                    if back:
+                        hands.call(f"tap {int(back['x'] * ABS_MAX)} {int(back['y'] * ABS_MAX)}")
+                    else:  # top level but scrolled: fling back to the top
+                        hands.call(f"stroke {ABS_MAX // 2} {int(ABS_MAX * 0.3)} {ABS_MAX // 2} {int(ABS_MAX * 0.85)} 20")
+                    hands.call("park")
+                    time.sleep(1)
+            elif "scroll_until" in step:
+                ok, detail = False, "never visible"
+                for _ in range(step.get("max", 4) + 1):
+                    shots += 1
+                    if find(screenshot(os.path.join(out, f"{shots:03d}.png")), step["scroll_until"]):
+                        ok, detail = True, "visible"
+                        break
+                    hands.call(f"stroke {ABS_MAX // 2} {int(ABS_MAX * 0.65)} {ABS_MAX // 2} {int(ABS_MAX * 0.4)} 80")
+                    hands.call("park")
+                    time.sleep(1)
             elif "sleep" in step:
                 time.sleep(step["sleep"])
             ms = int((time.time() - started) * 1000)
