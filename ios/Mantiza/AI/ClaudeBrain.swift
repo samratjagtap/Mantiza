@@ -73,10 +73,23 @@ struct ClaudeBrain: BigBrain {
         var headers = ["x-api-key": key, "anthropic-version": "2026-10-21"]
         if Self.fallbackModels.contains(model) { headers["anthropic-beta"] = "server-side-fallback-2026-07-01" }
         let started = Date()
-        let response = try await HTTP.postJSON(Self.url, headers: headers,
+        var content = content, maxTokens = maxTokens
+        var response: [String: Any] = [:], result: [String: Any]?
+        for attempt in 0...1 {  // a cut-off or unreadable answer gets one more try
+            response = try await HTTP.postJSON(Self.url, headers: headers,
                                                body: body(system: system, content: content, schema: schema, maxTokens: maxTokens),
                                                timeout: 60, service: "Claude")
-        let result = try Self.answer(response)
+            do {
+                result = try Self.answer(response)
+                break
+            } catch let e as AIError where attempt == 0 && (e == .cutOff || e == .notJSON) {
+                Log.info("Claude answer rejected (\(e.message)); asking again")
+                if e == .cutOff { maxTokens *= 2 } else {
+                    content.append(["type": "text", "text": "Your previous reply was rejected: \(e.message) Answer with JSON matching the schema."])
+                }
+            }
+        }
+        guard let result else { throw AIError.notJSON }
         let usage = response["usage"] as? [String: Any] ?? [:]
         Log.event("ai.call", ["brain": "claude", "model": response["model"] as? String ?? model,
                               "ms": Int(Date().timeIntervalSince(started) * 1000),
@@ -89,12 +102,12 @@ struct ClaudeBrain: BigBrain {
     static func answer(_ response: [String: Any]) throws -> [String: Any] {
         switch response["stop_reason"] as? String {
         case "refusal": throw AIError("Claude declined this step.")
-        case "max_tokens": throw AIError("Claude's answer was cut off.")
+        case "max_tokens": throw AIError.cutOff
         default: break
         }
         let blocks = response["content"] as? [[String: Any]] ?? []
         let text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }.joined()
-        guard let json = HTTP.jsonObject(in: text) else { throw AIError("Claude did not answer with JSON.") }
+        guard let json = HTTP.jsonObject(in: text) else { throw AIError.notJSON }
         return json
     }
 }

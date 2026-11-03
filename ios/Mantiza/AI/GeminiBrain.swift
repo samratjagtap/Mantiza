@@ -43,15 +43,18 @@ struct GeminiBrain: BigBrain {
             throw AIError("Bad Gemini model name.")
         }
         let started = Date()
-        let response = try await HTTP.postJSON(url, headers: ["x-goog-api-key": key], body: body(system: system, text: text, jpeg: jpeg),
-                                               timeout: 60, service: "Gemini")
-        let candidate = (response["candidates"] as? [[String: Any]])?.first
-        let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
-        let answer = parts.compactMap { $0["text"] as? String }.joined()
-        Log.event("ai.call", ["brain": "gemini", "model": model, "ms": Int(Date().timeIntervalSince(started) * 1000)])
-        guard let json = HTTP.jsonObject(in: answer) else {
-            throw AIError("Gemini did not answer with JSON (\(candidate?["finishReason"] as? String ?? "no answer")).")
+        var text = text
+        for attempt in 0...1 {  // an unreadable answer gets one more try
+            let response = try await HTTP.postJSON(url, headers: ["x-goog-api-key": key], body: body(system: system, text: text, jpeg: jpeg),
+                                                   timeout: 60, service: "Gemini")
+            let candidate = (response["candidates"] as? [[String: Any]])?.first
+            let parts = (candidate?["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
+            let answer = parts.compactMap { $0["text"] as? String }.joined()
+            Log.event("ai.call", ["brain": "gemini", "model": model, "ms": Int(Date().timeIntervalSince(started) * 1000)])
+            if let json = HTTP.jsonObject(in: answer) { return json }
+            Log.info("Gemini answer not JSON (\(candidate?["finishReason"] as? String ?? "no answer")); attempt \(attempt + 1)")
+            text += "\n\nYour previous reply was rejected: it was not JSON. Answer with JSON only."
         }
-        return json
+        throw AIError.notJSON
     }
 }

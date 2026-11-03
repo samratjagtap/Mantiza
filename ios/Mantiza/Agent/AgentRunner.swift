@@ -212,6 +212,8 @@ import Observation
         var before: Frame?           // the frame the last screen-changing action was taken on
         var lastSignature = ""       // action + target on that frame, to refuse a blind repeat
         var noChange = 0, stale = 0, actions = 0
+        var rejected = 0                // model answers that could not be used; each costs a fresh look
+        var nudged = ""                 // the repeated action the model was already told to change
         while actions < s.maxActions {
             if d.shouldStop() { return .stopped }
             try Task.checkCancellation()
@@ -239,7 +241,12 @@ import Observation
             }
             if decision == nil {
                 context.jpeg = frame.jpeg()
-                decision = try await d.big.decide(context)
+                do { decision = try await d.big.decide(context) } catch where Self.recoverable(error) && rejected < Self.maxRejected {
+                    rejected += 1
+                    note("answer rejected (\(error.localizedDescription)); looking again", ms: Self.ms(decideStarted))
+                    history.append("your previous answer was rejected: \(error.localizedDescription)")
+                    continue
+                }
                 teacher = context
             }
             guard let decision else { continue }
@@ -275,7 +282,14 @@ import Observation
                     return .blocked("The next step would press a risky button (send, delete, buy) the task did not ask for.")
                 }
                 let signature = "tap \(label ?? String(format: "%.2f,%.2f", point.x, point.y)) on \(frame.id)"
-                if signature == lastSignature { return .blocked("The same tap did not work twice; stopping instead of retrying.") }
+                if signature == lastSignature {
+                    // Say it once, as a different choice may work; a second repeat ends the run (no blind retries).
+                    guard nudged != signature else { return .blocked("The same tap did not work twice; stopping instead of retrying.") }
+                    nudged = signature
+                    note("\(decision.source) proposed the same tap again; asked for a different action", ms: thinkMs)
+                    history.append("you proposed tap '\(label ?? "icon")' again but it did nothing; choose a different action")
+                    continue
+                }
                 if let label, let e = element.flatMap(reading.element), let kind = Safety.risk(of: e) {
                     say("Waiting for your approval")
                     guard await d.approve("\(kind.capitalized): tap \(label)?") else {
@@ -369,6 +383,15 @@ import Observation
             }
         }
         return .blocked("Used all \(s.maxActions) steps without finishing.")
+    }
+
+    static let maxRejected = 3
+
+    /// Errors a fresh look and a new question can fix: unreadable answers and network trouble, not refusals,
+    /// bad keys or rate limits.
+    nonisolated static func recoverable(_ error: Error) -> Bool {
+        if let e = error as? AIError { return e.status == nil && !e.message.contains("declined") && !e.message.contains("key") }
+        return HTTP.retryable(error)
     }
 
     private func learn(_ c: DecisionContext, _ action: AgentAction, verified: Bool? = nil, step: Int) {

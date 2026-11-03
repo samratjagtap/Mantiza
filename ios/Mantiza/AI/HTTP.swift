@@ -5,6 +5,10 @@ struct AIError: LocalizedError, Equatable {
     var status: Int?
     var errorDescription: String? { message }
     init(_ message: String, status: Int? = nil) { self.message = message; self.status = status }
+
+    /// Answers a retry with a fresh request can fix (not refusals, keys or rate limits).
+    static let cutOff = AIError("The model's answer was cut off.")
+    static let notJSON = AIError("The model did not answer with JSON.")
 }
 
 /// One shared session for every AI call, so TLS connections stay warm between steps.
@@ -19,7 +23,13 @@ enum HTTP {
     /// Status codes worth retrying: rate limited, overloaded, server errors.
     static func retryable(_ status: Int) -> Bool { status == 429 || status == 529 || (500...599).contains(status) }
 
-    /// POST JSON and return the decoded JSON object. Retries 429/529/5xx with backoff (honouring retry-after).
+    /// Network failures worth one more try. A model request has no side effects, so repeating it is safe.
+    static func retryable(_ error: Error) -> Bool {
+        [URLError.timedOut, .networkConnectionLost, .notConnectedToInternet].contains((error as? URLError)?.code)
+    }
+
+    /// POST JSON and return the decoded JSON object. Retries 429/529/5xx with backoff (honouring retry-after),
+    /// and a timed-out or dropped request once.
     static func postJSON(_ url: URL, headers: [String: String], body: [String: Any], timeout: Double,
                          retries: Int = 2, service: String) async throws -> [String: Any] {
         var request = URLRequest(url: url, timeoutInterval: timeout)
@@ -27,9 +37,15 @@ enum HTTP {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        var attempt = 0
+        var attempt = 0, networkRetried = false
         while true {
-            let (data, response) = try await session.data(for: request)
+            let data: Data, response: URLResponse
+            do { (data, response) = try await session.data(for: request) } catch where retryable(error) && !networkRetried {
+                networkRetried = true
+                Log.info("\(service) request failed (\(error.localizedDescription)), trying once more")
+                try await Task.sleep(for: .milliseconds(500))
+                continue
+            }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             if status == 200, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return json }
             let detail = String(decoding: data.prefix(400), as: UTF8.self)
