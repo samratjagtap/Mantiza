@@ -94,7 +94,7 @@ struct ClaudeBrain: BigBrain {
 enum Schemas {
     static func nullable(_ type: String) -> [String: Any] { ["anyOf": [["type": type], ["type": "null"]]] }
 
-    static let actions = ["tap", "type", "scroll_down", "scroll_up", "back", "home", "open_app", "wait", "done", "blocked"]
+    static let actions = ["tap", "type", "scroll_down", "scroll_up", "back", "home", "open_app", "ask_user", "wait", "done", "blocked"]
 
     static let action: [String: Any] = [
         "type": "object",

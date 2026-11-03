@@ -160,7 +160,10 @@ import UIKit
                 return await UIApplication.shared.open(url)
             },
             progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) },
-            findContacts: { await FastPath.findContacts($0) })
+            findContacts: { await FastPath.findContacts($0) },
+            askUser: { [weak self] question in
+                await self?.talk.ask(question)
+            })
     }
 
     /// Plan and run a request end to end.

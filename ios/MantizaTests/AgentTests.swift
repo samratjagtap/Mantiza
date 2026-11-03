@@ -97,6 +97,31 @@ struct ScriptedBrain: BigBrain, @unchecked Sendable {
         guard case .blocked = outcome else { return XCTFail("\(outcome)") }
         XCTAssertFalse(phone.board.sent.contains { $0.hasPrefix("type") })
     }
+
+    func testAsksTheUserAndTypesTheAnswer() async {
+        let phone = FakePhone()
+        let plan = Subtask(goal: "Order a bowl", verification: ["typed"], maxActions: 4)
+        let brain = ScriptedBrain(plan: plan) { c in
+            if !c.history.contains(where: { $0.hasPrefix("asked") }) { return .askUser("Which size?") }
+            if !c.history.contains(where: { $0.hasPrefix("typed") }) { return .type("Large") }
+            return .done("typed")
+        }
+        var deps = phone.deps(brain)
+        var asked: [String] = []
+        deps.askUser = { q in asked.append(q); return "Large" }
+        let outcome = await AgentRunner().run(plan, deps: deps)
+        XCTAssertEqual(outcome, .done("General is open"))
+        XCTAssertEqual(asked, ["Which size?"])
+        XCTAssertTrue(phone.board.sent.contains { $0.hasPrefix("type") && $0.contains("Large") })
+    }
+
+    func testNoAnswerStopsTheRun() async {
+        let phone = FakePhone()
+        let plan = Subtask(goal: "Order", verification: ["x"], maxActions: 3)
+        let brain = ScriptedBrain(plan: plan) { _ in .askUser("Which one?") }
+        let outcome = await AgentRunner().run(plan, deps: phone.deps(brain))
+        XCTAssertEqual(outcome, .blocked("No answer to “Which one?”."))
+    }
 }
 
 final class SpotlightTests: XCTestCase {

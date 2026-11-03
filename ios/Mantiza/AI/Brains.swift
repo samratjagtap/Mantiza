@@ -31,6 +31,8 @@ enum AgentAction: Equatable {
     case back
     case home
     case openApp(String)
+    /// A short question only the user can answer (which item, which size); the answer becomes an input.
+    case askUser(String)
     case wait
     case done(String)
     case blocked(String)
@@ -43,6 +45,7 @@ enum AgentAction: Equatable {
         case .back: return "back"
         case .home: return "home"
         case .openApp: return "open_app"
+        case .askUser: return "ask_user"
         case .wait: return "wait"
         case .done: return "done"
         case .blocked: return "blocked"
@@ -108,6 +111,7 @@ enum Prompts {
     - type: type "text" into the focused field. Only type text that is in the task's inputs, exactly. Tap the field first.
     - scroll_down / scroll_up: reveal more of the page.
     - back: go back one screen. home: go to the Home Screen. open_app: open the app named in "text", only if it is not open yet (see the recent actions); if it is still loading, choose wait.
+    - ask_user: ask the user one short question in "text" when the task needs a choice only they can make (which restaurant, which size, which of two contacts). Never ask about what you can see or decide yourself, and never for passwords or codes. Their answer is added to the inputs.
     - wait: the screen is still loading.
     - done: the task's checks are visible on screen now. Put the evidence in "reason".
     - blocked: you cannot continue safely (a login, a payment, a PIN, a captcha, or the same action failed before). Explain in "reason".
@@ -164,6 +168,9 @@ enum DecisionParser {
         case "open_app":
             guard let text, !text.isEmpty else { throw AIError("The model chose open_app without an app name.") }
             return .openApp(text)
+        case "ask_user":
+            guard let text, !text.isEmpty else { throw AIError("The model chose ask_user without a question.") }
+            return .askUser(text)
         case "wait": return .wait
         case "done": return .done(reason)
         case "blocked": return .blocked(reason.isEmpty ? "The agent could not continue." : reason)

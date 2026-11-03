@@ -35,7 +35,7 @@ enum TrainingLog {
         case .back: return ["operation": "BACK"]
         case .home: return ["operation": "HOME"]
         case .wait: return ["operation": "WAIT"]
-        case .openApp: return ["operation": "NEEDS_AGENT"]
+        case .openApp, .askUser: return ["operation": "NEEDS_AGENT"]
         case .blocked: return ["operation": "BLOCKED"]
         case .done:
             // Only a done the independent check confirmed says what the screen shows.

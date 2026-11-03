@@ -41,6 +41,8 @@ final class AITests: XCTestCase {
         XCTAssertThrowsError(try DecisionParser.action(["action": "tap", "element": 99], reading: reading))
         XCTAssertThrowsError(try DecisionParser.action(["action": "type", "text": ""], reading: reading))
         XCTAssertThrowsError(try DecisionParser.action(["action": "dance"], reading: reading))
+        XCTAssertEqual(try DecisionParser.action(["action": "ask_user", "text": "Which size?"], reading: reading), .askUser("Which size?"))
+        XCTAssertThrowsError(try DecisionParser.action(["action": "ask_user"], reading: reading))
         XCTAssertEqual(try DecisionParser.action(["action": "open_app", "text": "Maps"], reading: reading), .openApp("Maps"))
     }
 

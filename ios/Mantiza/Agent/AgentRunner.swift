@@ -49,6 +49,8 @@ import Observation
         var progress: (Int, Int, String) -> Void = { _, _, _ in }
         /// Contacts matching a name (fast path); empty when not allowed.
         var findContacts: (String) async -> [FastPath.Match] = { _ in [] }
+        /// Ask the user a question (on the stick, answered by voice); nil when nobody answered.
+        var askUser: (String) async -> String? = { _ in nil }
     }
 
     private(set) var subtask: Subtask?
@@ -203,7 +205,8 @@ import Observation
     }
 
     /// Look -> decide -> act until the checks pass.
-    private func loop(_ s: Subtask) async throws -> Outcome {
+    private func loop(_ subtask: Subtask) async throws -> Outcome {
+        var s = subtask  // the user's answers to questions become inputs
         let d = deps!
         var lastAction = Date()
         var before: Frame?           // the frame the last screen-changing action was taken on
@@ -243,7 +246,7 @@ import Observation
             if let teacher, !decision.action.isDone { learn(teacher, decision.action, step: actions + 1) }
             let thinkMs = Self.ms(decideStarted)
             say("Step \(actions + 1): \(decision.action.name)")
-            _ = try? await d.hands.channel.send(.ui(.run, step: actions + 1, total: s.maxActions, text: decision.action.name))
+            _ = try? await d.hands.channel.send(.ui(.run, step: actions + 1, total: s.maxActions, text: Self.describe(decision.action, reading)))
             d.progress(actions + 1, s.maxActions, Self.describe(decision.action, reading))
             actions += 1
 
@@ -348,6 +351,14 @@ import Observation
                 history.append("home")
                 before = frame
                 lastAction = acted
+            case let .askUser(question):
+                note("\(decision.source): asked you: \(question)", ms: thinkMs)
+                say("Waiting for your answer")
+                guard let answer = await d.askUser(question) else { return .blocked("No answer to “\(question)”.") }
+                history.append("asked the user '\(question)', they said '\(answer)'")
+                s.inputs.append(answer)
+                note("you said: \(answer)", ms: 0)
+                lastAction = Date()
             case let .openApp(name):
                 let acted = Date()
                 note("\(decision.source): open \(name)", ms: thinkMs, capture: captureMs, ocr: ocrMs, source: decision.source,
@@ -389,6 +400,7 @@ extension AgentRunner {
         case .back: return "Going back"
         case .home: return "Going home"
         case let .openApp(name): return "Opening \(name)"
+        case .askUser: return "Asking you"
         case .wait: return "Waiting for the screen"
         case .done: return "Checking the result"
         case .blocked: return "Stopping"
