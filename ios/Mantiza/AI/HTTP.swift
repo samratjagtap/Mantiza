@@ -28,16 +28,22 @@ enum HTTP {
         [URLError.timedOut, .networkConnectionLost, .notConnectedToInternet].contains((error as? URLError)?.code)
     }
 
+    /// The server could not be reached at all (wrong address, other network, nothing listening).
+    static func unreachable(_ error: Error) -> Bool {
+        retryable(error) || [URLError.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed]
+            .contains((error as? URLError)?.code)
+    }
+
     /// POST JSON and return the decoded JSON object. Retries 429/529/5xx with backoff (honouring retry-after),
-    /// and a timed-out or dropped request once.
+    /// and a timed-out or dropped request once unless `networkRetry` is off.
     static func postJSON(_ url: URL, headers: [String: String], body: [String: Any], timeout: Double,
-                         retries: Int = 2, service: String) async throws -> [String: Any] {
+                         retries: Int = 2, networkRetry: Bool = true, service: String) async throws -> [String: Any] {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         headers.forEach { request.setValue($1, forHTTPHeaderField: $0) }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        var attempt = 0, networkRetried = false
+        var attempt = 0, networkRetried = !networkRetry
         while true {
             let data: Data, response: URLResponse
             do { (data, response) = try await session.data(for: request) } catch where retryable(error) && !networkRetried {

@@ -112,6 +112,11 @@ static void draw() {
     t.replace("|", "\n");
     d.println(t);
   }
+  if (!listening && s == UI_RUN) {  // a click of A during a task pauses it; say so, so it is never a surprise
+    d.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    d.setCursor(4, d.height() - 34);
+    d.print("A pause   B stop");
+  }
   if (!listening && s == UI_RUN && total > 0) {
     int w = d.width() - 8;
     d.drawRect(4, d.height() - 14, w, 10, TFT_WHITE);

@@ -279,6 +279,8 @@ import Observation
                 var context = DecisionContext(subtask: s, reading: visible, jpeg: nil, history: history)
                 var decision: Decision?
                 var teacher: DecisionContext?  // set when the big brain decided: its answer labels this screen
+                // The stick otherwise shows the last action until the next one, which reads as stuck.
+                _ = try? await d.hands.channel.send(.ui(.run, step: actions, total: s.maxActions, text: "Thinking..."))
                 if let fast = d.fast {
                     do { decision = try await fast.decide(context) } catch { Log.info("fast brain failed: \(error.localizedDescription)") }
                 }

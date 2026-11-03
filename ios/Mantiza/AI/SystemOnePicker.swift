@@ -14,6 +14,7 @@ struct SystemOnePicker: FastBrain {
         let minMargin: Double
         let minCheck: Double     // P(true) each verification needs before DONE counts
         let maxElements: Int
+        var timeout = 25.0       // a step waits this long at most before the big brain decides instead
 
         /// Pinned: the confidence thresholds were chosen for this version. A choice takes at most 255 options.
         static let jev = Service(name: "jev", url: URL(string: "https://api.typesafe.ai/v1/systemone")!, model: "jev-1.14.0",
@@ -25,7 +26,7 @@ struct SystemOnePicker: FastBrain {
         /// 100 options per choice, and options share one token budget, so fewer elements go in.
         static func laya(_ base: URL) -> Service {
             Service(name: "laya", url: base.appending(path: "v1/systemone"), model: "mantiza",
-                    minConfidence: 0.85, minMargin: 0.3, minCheck: 0.85, maxElements: 60)
+                    minConfidence: 0.85, minMargin: 0.3, minCheck: 0.85, maxElements: 60, timeout: 3)
         }
     }
 
@@ -54,11 +55,20 @@ struct SystemOnePicker: FastBrain {
     ]
 
     func decide(_ c: DecisionContext) async throws -> Decision? {
+        if Reachability.skipping(service.name) { return nil }
         let elements = Array(c.reading.elements.prefix(service.maxElements))
         let started = Date()
-        let response = try await HTTP.postJSON(service.url, headers: key.map { ["Authorization": "Bearer \($0)"] } ?? [:],
-                                               body: Self.body(c, elements: elements, model: service.model), timeout: 25,
+        let response: [String: Any]
+        do {
+            response = try await HTTP.postJSON(service.url, headers: key.map { ["Authorization": "Bearer \($0)"] } ?? [:],
+                                               body: Self.body(c, elements: elements, model: service.model),
+                                               timeout: service.timeout, networkRetry: false,
                                                service: service.name == "laya" ? "Laya" : "Jev")
+        } catch where HTTP.unreachable(error) {
+            Reachability.down(service.name, error.localizedDescription)
+            return nil
+        }
+        Reachability.up(service.name)
         let answers = response["answers"] as? [String: Any] ?? [:]
         let decision = Self.interpret(answers, context: c, elements: elements, service: service)
         Log.event("ai.call", ["brain": service.name, "model": response["model"] as? String ?? service.model,
@@ -134,4 +144,36 @@ struct SystemOnePicker: FastBrain {
         default: return nil  // HOME, BLOCKED and NEEDS_AGENT go to the big brain
         }
     }
+}
+
+/// A quick picker that could not be reached is skipped for a while, so every step does not wait out its timeout
+/// (the Mac running Laya is asleep, or the phone is on another Wi-Fi). The big brain decides meanwhile.
+enum Reachability {
+    static let skip = 600.0
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var downSince: [String: Date] = [:]
+
+    static func skipping(_ name: String, now: Date = Date()) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard let since = downSince[name] else { return false }
+        return now.timeIntervalSince(since) < skip
+    }
+
+    static func isDown(_ name: String) -> Bool { lock.withLock { downSince[name] != nil } }
+
+    static func down(_ name: String, _ why: String) {
+        let first = lock.withLock { () -> Bool in
+            defer { downSince[name] = Date() }
+            return downSince[name] == nil
+        }
+        if first { Log.event("ai.fast_down", ["brain": name, "why": why]) }
+        if name == "laya" { Task { @MainActor in LayaFinder.refresh() } }
+    }
+
+    static func up(_ name: String) {
+        if lock.withLock({ downSince.removeValue(forKey: name) }) != nil { Log.event("ai.fast_up", ["brain": name]) }
+    }
+
+    /// Ask again now (a new address was found or entered).
+    static func reset(_ name: String) { lock.withLock { _ = downSince.removeValue(forKey: name) } }
 }

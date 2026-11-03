@@ -30,14 +30,18 @@ struct SettingsView: View {
                     Text("Off").tag(AISettings.Fast.off)
                 }
                 if fast == .laya {
-                    TextField("http://10.0.0.243:8765", text: $layaURL)
+                    TextField("http://your-mac.local:8765", text: $layaURL)
                         .keyboardType(.URL).autocorrectionDisabled().textInputAutocapitalization(.never)
+                    if Reachability.isDown("laya") {
+                        Label("Not reachable on this Wi-Fi. Steps use the big brain.", systemImage: "wifi.exclamationmark")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
             } header: {
                 Text("Quick steps")
             } footer: {
                 Text(fast == .laya
-                     ? "Laya runs on your Mac (tools/laya/serve.sh prints the address and key). It picks taps from the text on screen; unsure steps go to the big brain."
+                     ? "Laya runs on your Mac (tools/laya/serve.sh prints the address and key; Mantiza finds the Mac on the same Wi-Fi by itself). It picks taps from the text on screen; unsure steps go to the big brain."
                      : "The quick picker chooses most taps from the text on screen in a fraction of a second; unsure steps go to the big brain.")
             }
             Section("Keys") { KeysForm() }
@@ -54,7 +58,7 @@ struct SettingsView: View {
         .onChange(of: claudeModel) { _, v in AISettings.claudeModel = v }
         .onChange(of: geminiModel) { _, v in AISettings.geminiModel = v }
         .onChange(of: fast) { _, v in AISettings.fast = v }
-        .onChange(of: layaURL) { _, v in AISettings.layaURL = v }
+        .onChange(of: layaURL) { _, v in AISettings.layaURL = v; Reachability.reset("laya") }
     }
 }
 

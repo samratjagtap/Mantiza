@@ -15,10 +15,11 @@ struct MantizaApp: App {
                     app.reloadCalibration()
                     KeyStore.importDropped()
                     KeyStore.refreshRedaction()
+                    LayaFinder.refresh()
                     Task { await Notifier.requestPermission() }
                 }
                 .onOpenURL { app.open($0) }
-                .onChange(of: phase) { _, now in if now == .active { app.resumeScreenIfWaiting() } }
+                .onChange(of: phase) { _, now in if now == .active { app.resumeScreenIfWaiting(); LayaFinder.refresh() } }
         }
     }
 }

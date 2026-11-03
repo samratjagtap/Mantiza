@@ -39,6 +39,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mantiza-laya._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Mantiza sends the text on your screen to the Laya server on your own computer to pick quick steps.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
