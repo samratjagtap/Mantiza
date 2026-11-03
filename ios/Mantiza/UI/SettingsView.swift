@@ -28,6 +28,10 @@ struct SettingsView: View {
                 Text("Jev picks most taps from the text on screen in a fraction of a second; unsure steps go to the big brain.")
             }
             Section("Keys") { KeysForm() }
+            Section {
+                NavigationLink("Safety") { SafetyView() }
+                NavigationLink("Privacy") { PrivacyView() }
+            }
             Section("Log") {
                 NavigationLink("Recent events") { LogView() }
             }

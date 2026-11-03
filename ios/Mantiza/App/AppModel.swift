@@ -189,6 +189,18 @@ import UIKit
         }
     }
 
+    /// Delete runs, workflows, approvals, calibration and keys.
+    func deleteAllData() {
+        runs.deleteAll()
+        workflows.deleteAll()
+        approvals.clearHistory()
+        resetCalibration()
+        KeyStore.Provider.allCases.forEach { KeyStore.set($0, nil) }
+        suggestion = nil
+        lastRecord = nil
+        Log.event("privacy.deleted")
+    }
+
     /// Load the calibration saved for this screen size (call once a window exists).
     func reloadCalibration() {
         hands.calibration = CalibrationStore.load(screen: Screen.size) ?? .identity
