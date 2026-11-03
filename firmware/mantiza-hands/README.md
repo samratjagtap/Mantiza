@@ -23,19 +23,33 @@ If flashing leaves the stick in download mode (screen dark), press the side powe
 2. On the iPhone: Settings > Accessibility > Touch > AssistiveTouch > Devices > Bluetooth Devices > **Mantiza Hands XXXX**.
 3. Keep Portrait Orientation Lock on (the absolute pointer maps onto the portrait screen).
 
+## Session auth
+
+Only the paired Mantiza app may drive the stick over Bluetooth (every app on the phone shares the same BLE connection).
+
+1. The app makes a random secret and sends `secret HEX64`. The stick shows **Pair code NNNN**; press **A** within 60 s if the
+   app shows the same code. The secret is kept in flash. A new secret is only accepted when none exists or pairing is open
+   (hold A for 3 s), so another app cannot replace it.
+2. On each connection: `hello` returns a nonce, the app answers `auth HMAC_HEX`.
+3. After that every BLE line ends with ` ~TAG`: the first 8 bytes of HMAC-SHA256(secret, session nonce + line), hex. Ids must
+   go up. Lines without a valid tag get `err auth`. `ping`, `version`, `status`, `hello`, `auth` and `secret` need no tag.
+
+USB serial is not checked, so the Mac harness keeps working. `unpair` also erases the secret. `status` shows `"auth"`.
+
 ## Buttons
 
 | Screen | A | B |
 |---|---|---|
 | Idle | click: event `a` (run next suggestion); hold 3 s: open pairing | click: event `b`; hold 1 s: stop |
 | Working | | click or hold: emergency stop |
-| Approve? | Yes | No |
+| Approve? (`ask`, `prompt`) | Yes | No |
+| Pair code | Confirm | Cancel |
 
 Shaking the stick while it is working or asking is also an emergency stop.
 
 ## Protocol
 
-One line per command, `<id> <command>`, answered `<id> ok [result]` or `<id> err <why>`, over the BLE command service (`f5da0600-6c5e-4c62-bbd9-ba1b370af73d`: cmd `...0601` write, reply `...0602` notify, status `...0603` read/notify JSON every second) or USB serial at 115200. Device events arrive as `evt a|b|stop|pairing`. The full command list is at the top of `mantiza-hands.ino`.
+One line per command, `<id> <command>`, answered `<id> ok [result]` or `<id> err <why>`, over the BLE command service (`f5da0600-6c5e-4c62-bbd9-ba1b370af73d`: cmd `...0601` write, reply `...0602` notify, status `...0603` read/notify JSON every second) or USB serial at 115200. Device events arrive as `evt a|b|stop|pairing|yes|no|timeout`; `prompt SECONDS TEXT` shows an approval without blocking (the answer comes as `evt yes|no|timeout`, and `unprompt` withdraws it when the phone answered first). The full command list is at the top of `mantiza-hands.ino`.
 
 Pointer positions are absolute, 0..32767 across the whole screen in each axis.
 
