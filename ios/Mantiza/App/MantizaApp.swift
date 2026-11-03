@@ -35,6 +35,7 @@ struct MainTabs: View {
     var body: some View {
         TabView {
             Tab("Run", systemImage: "sparkles") { NavigationStack { RunView() } }
+            Tab("Runs", systemImage: "clock.arrow.circlepath") { NavigationStack { RunsView() } }
             Tab("Device", systemImage: "cursorarrow.rays") { NavigationStack { DeviceView() } }
             Tab("Look", systemImage: "eye") { NavigationStack { EyesView() } }
             Tab("Settings", systemImage: "gearshape") { NavigationStack { SettingsView() } }

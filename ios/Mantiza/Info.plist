@@ -36,6 +36,8 @@
 	<false/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Mantiza connects to its Mantiza Hands stick, which taps and types on this iPhone for you.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Mantiza looks up the person you name, so it can open a message to them directly.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Share this iPhone screen so Mantiza can see the app it is operating for you.</string>
 	<key>NSSupportsLiveActivities</key>

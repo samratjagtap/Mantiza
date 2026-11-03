@@ -12,6 +12,7 @@ import UIKit
     let runner = AgentRunner()
     let approvals = Approvals()
     let live = LiveRun()
+    let runs = RunStore()
     /// The phone's screen (ScreenCaptureKit), or still demo images in the Simulator.
     let screen: ScreenSource
     var onboarded: Bool {
@@ -19,6 +20,8 @@ import UIKit
     }
     /// The last device event (button / shake), for the UI.
     private(set) var lastEvent: BoardEvent?
+    /// The last saved run (the Run tab offers to save it as a workflow).
+    private(set) var lastRecord: RunRecord?
     /// Set when the stick asks to stop (B held or shaken); the agent loop checks it between actions.
     private(set) var stopRequested = false
 
@@ -102,7 +105,8 @@ import UIKit
                     guard UIApplication.shared.applicationState == .active else { return false }
                     return await UIApplication.shared.open(url)
                 },
-                progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) })
+                progress: { [weak self] step, total, action in self?.live.progress(step: step, total: total, action: action) },
+                findContacts: { await FastPath.findContacts($0) })
         } catch {
             _ = await runner.run(request, deps: AgentRunner.Deps(
                 hands: hands, screen: screen, big: MissingBrain(message: error.localizedDescription), fast: nil,
@@ -115,6 +119,11 @@ import UIKit
             if !screen.live { try await screen.start() }
         })
         live.end(outcome.summary)
+        let record = RunRecord(request: request, plan: runner.subtask, steps: runner.steps, outcome: outcome.summary,
+                               success: { if case .done = outcome { return true }; return false }(),
+                               bigBrain: deps.big.name)
+        runs.save(record)
+        lastRecord = record
         try? await hands.toggleKeyboard()  // iOS hides the on-screen keyboard while the stick is connected
     }
 

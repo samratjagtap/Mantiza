@@ -21,10 +21,17 @@ import Observation
         }
     }
 
-    struct Step: Identifiable, Equatable {
-        let id: Int
-        let text: String
-        let ms: Int
+    struct Step: Identifiable, Equatable, Codable {
+        var id: Int
+        var text: String
+        /// Deciding (fast + big brain).
+        var ms: Int
+        var captureMs = 0
+        var ocrMs = 0
+        var actMs = 0
+        var source = ""
+        /// What was done, for learned workflows.
+        var recorded: RecordedAction?
     }
 
     /// What the runner needs from the app (closures so tests can fake each part).
@@ -40,6 +47,8 @@ import Observation
         var openURL: (URL) async -> Bool
         /// Step n of at most m, and what it is doing (Live Activity).
         var progress: (Int, Int, String) -> Void = { _, _, _ in }
+        /// Contacts matching a name (fast path); empty when not allowed.
+        var findContacts: (String) async -> [FastPath.Match] = { _ in [] }
     }
 
     private(set) var subtask: Subtask?
@@ -90,14 +99,24 @@ import Observation
 
     private func say(_ text: String) { status = text }
 
-    private func note(_ text: String, ms: Int) {
-        steps.append(Step(id: steps.count + 1, text: text, ms: ms))
-        Log.event("run.step", ["n": steps.count, "text": text, "ms": ms])
+    nonisolated static func ms(_ since: Date) -> Int { Int(Date().timeIntervalSince(since) * 1000) }
+
+    private func note(_ text: String, ms: Int, capture: Int = 0, ocr: Int = 0, act: Int = 0, source: String = "",
+                      recorded: RecordedAction? = nil) {
+        steps.append(Step(id: steps.count + 1, text: text, ms: ms, captureMs: capture, ocrMs: ocr, actMs: act,
+                          source: source, recorded: recorded))
+        Log.event("run.step", ["n": steps.count, "text": text, "decide": ms, "capture": capture, "ocr": ocr, "act": act,
+                               "source": source])
     }
 
     private func execute(_ s: Subtask) async throws -> Outcome {
         let d = deps!
-        if let app = s.app {
+        let contacts = if let name = s.contact { await d.findContacts(name) } else { [FastPath.Match]() }
+        if let fast = FastPath.url(for: s, contacts: contacts), await d.openURL(fast.url) {
+            note(fast.note, ms: 0, source: "fast path")
+            history.append(fast.note.lowercased())
+            try await Task.sleep(for: .seconds(1.2))
+        } else if let app = s.app {
             say("Opening \(app)")
             try await openApp(app)
         }
@@ -110,6 +129,7 @@ import Observation
             try Task.checkCancellation()
             let started = Date()
             let frame = try await d.screen.settled(after: lastAction)
+            let captureMs = Self.ms(started)
             if let previous = before {
                 let changed = ScreenDiff.changed(previous.image, frame.image)
                 noChange = changed ? 0 : noChange + 1
@@ -117,7 +137,10 @@ import Observation
                 if noChange >= 3 { return .blocked("The screen stopped responding to taps.") }
                 before = nil
             }
+            let ocrStarted = Date()
             let reading = try await OCR.read(frame)
+            let ocrMs = Self.ms(ocrStarted)
+            let decideStarted = Date()
             if let why = Safety.stopReason(reading) { return .blocked(why) }
             let (visible, hidden) = Safety.filter(reading, allowed: s.allowedRisks)
             var context = DecisionContext(subtask: s, reading: visible, jpeg: nil, history: history)
@@ -130,7 +153,7 @@ import Observation
                 decision = try await d.big.decide(context)
             }
             guard let decision else { continue }
-            let thinkMs = Int(Date().timeIntervalSince(started) * 1000)
+            let thinkMs = Self.ms(decideStarted)
             say("Step \(actions + 1): \(decision.action.name)")
             _ = try? await d.hands.channel.send(.ui(.run, step: actions + 1, total: s.maxActions, text: decision.action.name))
             d.progress(actions + 1, s.maxActions, Self.describe(decision.action, reading))
@@ -183,8 +206,11 @@ import Observation
                     }
                 }
                 let acted = Date()
+                let actStarted = Date()
                 try await act { try await d.hands.tap(target) }
-                note("\(decision.source): tap “\(label ?? "icon")” (\(Int(target.x * 1000)),\(Int(target.y * 1000)))", ms: thinkMs)
+                let actMs = Self.ms(actStarted)
+                note("\(decision.source): tap “\(label ?? "icon")” (\(Int(target.x * 1000)),\(Int(target.y * 1000)))", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source,
+                     recorded: RecordedAction(kind: "tap", target: label, point: target))
                 history.append("tap \(element.map { "\($0) " } ?? "")'\(label ?? "icon")'")
                 lastSignature = signature
                 before = frame
@@ -197,36 +223,47 @@ import Observation
                 }
                 if Safety.looksSecret(text) { return .blocked("That looks like a PIN, code or card number; Mantiza never types those.") }
                 let acted = Date()
+                let actStarted = Date()
                 try await act { try await d.hands.type(text) }
-                note("\(decision.source): type “\(text)”", ms: thinkMs)
+                let actMs = Self.ms(actStarted)
+                note("\(decision.source): type “\(text)”", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source,
+                     recorded: RecordedAction(kind: "type", text: text))
                 history.append("typed '\(text)'")
                 before = frame
                 lastAction = acted
             case let .scroll(down):
                 let acted = Date()
+                let actStarted = Date()
                 try await act { try await d.hands.scroll(down: down) }
-                note("\(decision.source): scroll \(down ? "down" : "up")", ms: thinkMs)
+                let actMs = Self.ms(actStarted)
+                note("\(decision.source): scroll \(down ? "down" : "up")", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source,
+                     recorded: RecordedAction(kind: down ? "scroll_down" : "scroll_up"))
                 history.append("scroll \(down ? "down" : "up")")
                 before = frame
                 lastAction = acted
             case .back:
                 let acted = Date()
+                let actStarted = Date()
                 try await act { try await d.hands.swipe(from: CGPoint(x: 0.01, y: 0.5), to: CGPoint(x: 0.7, y: 0.5)) }
-                note("\(decision.source): back", ms: thinkMs)
+                let actMs = Self.ms(actStarted)
+                note("\(decision.source): back", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source, recorded: RecordedAction(kind: "back"))
                 history.append("back")
                 before = frame
                 lastAction = acted
             case .home:
                 let acted = Date()
+                let actStarted = Date()
                 try await act { try await d.hands.home() }
-                note("\(decision.source): home", ms: thinkMs)
+                let actMs = Self.ms(actStarted)
+                note("\(decision.source): home", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source, recorded: RecordedAction(kind: "home"))
                 history.append("home")
                 before = frame
                 lastAction = acted
             case let .openApp(name):
                 let acted = Date()
                 try await openApp(name)
-                note("\(decision.source): open \(name)", ms: thinkMs)
+                note("\(decision.source): open \(name)", ms: thinkMs, capture: captureMs, ocr: ocrMs, source: decision.source,
+                     recorded: RecordedAction(kind: "open_app", text: name))
                 history.append("opened \(name)")
                 lastAction = acted
             }
@@ -264,6 +301,14 @@ extension AgentRunner {
         case .blocked: return "Stopping"
         }
     }
+}
+
+/// One executed action, kept so a successful run can be replayed as a workflow.
+struct RecordedAction: Codable, Equatable {
+    var kind: String           // tap, type, scroll_down, scroll_up, back, home, open_app
+    var target: String?        // text of the tapped element (nil: an icon)
+    var text: String?          // typed text, or the app name
+    var point: CGPoint?        // where the tap landed (fallback for icons)
 }
 
 @MainActor enum AppLauncher {

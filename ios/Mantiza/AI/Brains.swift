@@ -13,9 +13,11 @@ struct Subtask: Codable, Equatable {
     /// Risky actions the user asked for: send, delete, purchase, call, post. Each still needs approval.
     var allowedRisks: [String] = []
     var maxActions = 15
+    /// The person the task is about ("Azad"), for the contacts fast path.
+    var contact: String?
 
     enum CodingKeys: String, CodingKey {
-        case goal, app, inputs, verification
+        case goal, app, inputs, verification, contact
         case allowedRisks = "allowed_risks"
         case maxActions = "max_actions"
     }
@@ -93,6 +95,7 @@ enum Prompts {
     - verification: 1 to 3 short checks a person could confirm on screen when the task is done.
     - allowed_risks: which of send, delete, purchase, call, post the user explicitly asked for. Empty if none. Each one is still confirmed by the user before it happens.
     - max_actions: a small budget, usually 6 to 20.
+    - contact: the name of the person the task is about (for example who to message), or null.
     """
 
     static let actor = """

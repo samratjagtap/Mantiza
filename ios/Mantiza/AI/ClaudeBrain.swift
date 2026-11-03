@@ -119,8 +119,9 @@ enum Schemas {
             "verification": ["type": "array", "items": ["type": "string"]],
             "allowed_risks": ["type": "array", "items": ["type": "string", "enum": Array(Safety.riskKinds).sorted()]],
             "max_actions": ["type": "integer"],
+            "contact": nullable("string"),
         ],
-        "required": ["goal", "app", "inputs", "verification", "allowed_risks", "max_actions"],
+        "required": ["goal", "app", "inputs", "verification", "allowed_risks", "max_actions", "contact"],
         "additionalProperties": false,
     ]
 
