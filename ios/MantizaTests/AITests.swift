@@ -122,7 +122,7 @@ final class AITests: XCTestCase {
         let laya = SystemOnePicker.Service.laya(try XCTUnwrap(URL(string: "http://10.0.0.243:8000")))
         XCTAssertEqual(laya.url.absoluteString, "http://10.0.0.243:8000/v1/systemone")
         let body = SystemOnePicker.body(context, elements: reading.elements, model: laya.model)
-        XCTAssertEqual(body["model"] as? String, "typed-decisions")
+        XCTAssertEqual(body["model"] as? String, "mantiza")
         XCTAssertLessThan(laya.maxElements, 100)  // the server caps a choice at 100 options, NONE included
     }
 

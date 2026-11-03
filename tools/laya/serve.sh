@@ -23,6 +23,14 @@ echo "Laya key:     $(cat "$DIR/.key")"
 
 export LAYA_API_KEY="$(cat "$DIR/.key")"
 export LAYA_HOST="${LAYA_HOST:-0.0.0.0}" LAYA_PORT="$PORT"
-export LAYA_MODELS="${LAYA_MODELS:-typed-decisions}" LAYA_DEFAULT_MODEL="${LAYA_DEFAULT_MODEL:-typed-decisions}"
+# The app asks for model "mantiza": the fine-tune tools/laya/train.sh promoted, else the stock typed-decisions checkpoint.
+if [ -e "$DIR/models/current" ]; then
+  MANTIZA_SOURCE="\"$(cd "$DIR/models/current" && pwd -P)\""
+else
+  MANTIZA_SOURCE='["convaiinnovations/laya", "typed-decisions"]'
+fi
+export LAYA_EXTRA_MODELS="{\"mantiza\": $MANTIZA_SOURCE}"
+echo "Laya model: mantiza = $MANTIZA_SOURCE"
+export LAYA_MODELS="${LAYA_MODELS:-mantiza}" LAYA_DEFAULT_MODEL="${LAYA_DEFAULT_MODEL:-mantiza}"
 export LAYA_DEVICE="${LAYA_DEVICE:-mps}" LAYA_PRELOAD=1
 exec "$VENV/bin/laya-serve"

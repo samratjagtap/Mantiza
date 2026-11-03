@@ -4,3 +4,5 @@ tools/e2e/out/
 .DS_Store
 tools/laya/.key
 tools/laya/.venv/
+tools/laya/data/
+tools/laya/models/

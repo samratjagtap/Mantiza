@@ -19,11 +19,12 @@ struct SystemOnePicker: FastBrain {
         static let jev = Service(name: "jev", url: URL(string: "https://api.typesafe.ai/v1/systemone")!, model: "jev-1.14.0",
                                  minConfidence: 0.6, minMargin: 0.1, minCheck: 0.7, maxElements: 200)
 
-        /// Laya's typed-decisions checkpoint. Its model card says out-of-the-box probabilities are over-confident,
+        /// "mantiza" on our server (tools/laya/serve.sh): the fine-tune on our own runs once one passed its test,
+        /// else Laya's typed-decisions checkpoint. Its model card says out-of-the-box probabilities are over-confident,
         /// so the gate is stricter than Jev's until we fit it on our own run logs. The server takes at most
         /// 100 options per choice, and options share one token budget, so fewer elements go in.
         static func laya(_ base: URL) -> Service {
-            Service(name: "laya", url: base.appending(path: "v1/systemone"), model: "typed-decisions",
+            Service(name: "laya", url: base.appending(path: "v1/systemone"), model: "mantiza",
                     minConfidence: 0.85, minMargin: 0.3, minCheck: 0.85, maxElements: 60)
         }
     }
