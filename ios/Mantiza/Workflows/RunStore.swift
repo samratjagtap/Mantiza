@@ -45,6 +45,18 @@ struct RunRecord: Codable, Identifiable, Equatable {
 
     func url(_ r: RunRecord) -> URL { folder.appendingPathComponent("\(r.id.uuidString).json") }
 
+    /// A copy safe to share: keys, typed text, emails and phone or card numbers masked (Redactor).
+    func exportURL(_ r: RunRecord) -> URL {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("mantiza-run-\(r.id.uuidString.prefix(8)).json")
+        var redactor = Redactor.forThisPhone
+        redactor.typed = r.plan?.inputs ?? []
+        guard let data = try? Self.encoder.encode(r), let any = try? JSONSerialization.jsonObject(with: data),
+              let clean = try? JSONSerialization.data(withJSONObject: redactor.json(any, redactor.text),
+                                                      options: [.prettyPrinted, .sortedKeys]) else { return url(r) }
+        try? clean.write(to: out, options: .atomic)
+        return out
+    }
+
     func load() {
         let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
         runs = files.filter { $0.pathExtension == "json" }

@@ -62,7 +62,17 @@ struct LogView: View {
     @State private var lines = Log.recent
 
     var body: some View {
-        List(lines.reversed(), id: \.self) { Text($0).font(.caption.monospaced()) }
+        List {
+            let reports = CrashReports.files
+            if !reports.isEmpty {
+                Section("Crash and hang reports from iOS") {
+                    ForEach(reports, id: \.self) { url in ShareLink(url.lastPathComponent, item: url) }
+                }
+            }
+            Section("Recent events") {
+                ForEach(lines.reversed(), id: \.self) { Text($0).font(.caption.monospaced()) }
+            }
+        }
             .navigationTitle("Log")
             .refreshable { lines = Log.recent }
     }

@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         Notifier.setUp(delegate: self)
+        CrashReports.shared.start()
         return true
     }
 

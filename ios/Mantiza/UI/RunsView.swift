@@ -51,6 +51,6 @@ struct RunDetailView: View {
             }
         }
         .navigationTitle(run.request)
-        .toolbar { ShareLink(item: app.runs.url(run)) }
+        .toolbar { ShareLink(item: app.runs.exportURL(run)) }
     }
 }

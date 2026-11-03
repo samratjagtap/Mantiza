@@ -7,7 +7,7 @@ Mantiza reuses code from the open-source projects below. Each is used under its 
 Based on ESP32 iPhone Agent by Henry Yuan.
 
 - Sources: [onehumanbeing/esp32-iphone-agent](https://github.com/onehumanbeing/esp32-iphone-agent), and the forks [await-ovo/esp32-iphone-agent](https://github.com/await-ovo/esp32-iphone-agent) and [jinwon-int/esp32-iphone-agent](https://github.com/jinwon-int/esp32-iphone-agent).
-- Used in: `firmware/mantiza-hands/` (`ble_link.*`, `nimble_cfg.h`, `hands.*`, `src/hid/report.*` are adapted from the await-ovo firmware; the absolute pointer descriptor and iOS timing rules come from the jinwon-int fork); `ios/Mantiza/` (`Board/BoardLink.swift`, `Board/BoardProtocol.swift`, `Board/CommandChannel.swift`, `Calibration/TouchProbe.swift` and the screen capture code in `Eyes/` are adapted from the await-ovo iOS app; `Agent/Recovery.swift`, `App/RunRecovery.swift` and `MantizaTests/RecoveryTests.swift` are adapted from the original project's iOS app).
+- Used in: `firmware/mantiza-hands/` (`ble_link.*`, `nimble_cfg.h`, `hands.*`, `src/hid/report.*` are adapted from the await-ovo firmware; the absolute pointer descriptor and iOS timing rules come from the jinwon-int fork); `ios/Mantiza/` (`Board/BoardLink.swift`, `Board/BoardProtocol.swift`, `Board/CommandChannel.swift`, `Calibration/TouchProbe.swift` and the screen capture code in `Eyes/` are adapted from the await-ovo iOS app; `Agent/Recovery.swift`, `App/RunRecovery.swift`, `App/CrashReports.swift`, `Workflows/Redactor.swift` and `MantizaTests/RecoveryTests.swift` are adapted from the original project's iOS app, and some rules in `Resources/playbook.md` follow its prompts).
 - Not used: the GPL-3.0 AirPlay receiver (`hardware/hid_bridge/src/airplay/`) in the original project.
 
 ```

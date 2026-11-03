@@ -53,6 +53,24 @@ import Foundation
 
     func key(_ combo: String) async throws { try await channel.send(.key(combo)) }
     func home() async throws { try await channel.send(.home) }
+
+    /// Home, checked: when the screen did not change, try Cmd+H, then a swipe up from the bottom edge (some apps
+    /// and states ignore the Home key). `screen` nil: just the key.
+    func home(checking screen: ScreenSource?) async throws {
+        let before = screen?.latest
+        try await home()
+        guard let screen, let before else { return }
+        let fallbacks: [() async throws -> Void] = [
+            { try await self.channel.send(.key("cmd+h")) },
+            { try await self.swipe(from: CGPoint(x: 0.5, y: 0.995), to: CGPoint(x: 0.5, y: 0.55), steps: 12) },
+        ]
+        for fallback in fallbacks {
+            try await Task.sleep(for: .milliseconds(700))
+            if let now = screen.latest, now.id != before.id, ScreenDiff.changed(before.image, now.image) { return }
+            Log.info("home: the screen did not change; trying the next way home")
+            try await fallback()
+        }
+    }
     /// Show (or hide) the on-screen keyboard, which iOS hides while a hardware keyboard is connected.
     func toggleKeyboard() async throws { try await channel.send(.keyboardToggle) }
 

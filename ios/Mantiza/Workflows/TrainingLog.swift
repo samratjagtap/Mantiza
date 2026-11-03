@@ -53,6 +53,8 @@ enum TrainingLog {
     /// Save a run's rows: `training/gold/<run>.jsonl` when it succeeded, else `training/failed/`.
     static func save(_ rows: [[String: Any]], run: UUID, success: Bool) {
         guard !rows.isEmpty else { return }
+        let redactor = Redactor.forThisPhone
+        let rows = rows.compactMap { redactor.json($0, redactor.light) as? [String: Any] }
         let dir = folder.appending(path: success ? "gold" : "failed")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let lines = rows.compactMap { row -> String? in

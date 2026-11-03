@@ -162,7 +162,7 @@ import Observation
         case "back":
             try await act { try await d.hands.swipe(from: CGPoint(x: 0.01, y: 0.5), to: CGPoint(x: 0.7, y: 0.5)) }
         case "home":
-            try await act { try await d.hands.home() }
+            try await act { try await d.hands.home(checking: d.screen) }
         case "open_app":
             guard let name = step.text else { return nil }
             try await openApp(name)
@@ -420,7 +420,7 @@ import Observation
                 case .home:
                     let acted = Date()
                     let actStarted = Date()
-                    try await act { try await d.hands.home() }
+                    try await act { try await d.hands.home(checking: d.screen) }
                     let actMs = Self.ms(actStarted)
                     note("\(decision.source): home", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source, recorded: RecordedAction(kind: "home"))
                     history.append("home")
@@ -582,9 +582,9 @@ struct RecordedAction: Codable, Equatable {
             try await Task.sleep(for: .seconds(1))
             return
         }
-        try await hands.home()
+        try await hands.home(checking: screen)
         try await Task.sleep(for: .milliseconds(500))
-        try await hands.home()  // a second press goes to the first Home Screen page
+        try await hands.home()  // a second press goes to the first Home Screen page (no change there is fine)
         var last: Set<String>?
         for page in 0..<maxPages {
             let frame = try await screen.settled(after: Date().addingTimeInterval(-0.1), quiet: 0.4, most: 2)

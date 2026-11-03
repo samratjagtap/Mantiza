@@ -163,3 +163,38 @@ final class SpotlightTests: XCTestCase {
         XCTAssertNil(AppLinks.url(for: "Some Unknown App"))
     }
 }
+
+@MainActor final class HomeAndRedactionTests: XCTestCase {
+    func testHomeFallsBackWhenTheScreenDoesNotChange() async throws {
+        let board = MockBoard()
+        let screen = StillScreen()
+        screen.show(DemoScreen.settings())
+        try await Hands(channel: board.commands).home(checking: screen)
+        XCTAssertEqual(board.sent.filter { ["home", "key cmd+h"].contains($0) || $0.hasPrefix("stroke") }.count, 3)
+    }
+
+    func testHomeStopsOnceTheScreenChanged() async throws {
+        let board = MockBoard()
+        let screen = StillScreen()
+        screen.show(DemoScreen.settings())
+        board.onCommand = { c in if c.name == "home" { screen.show(DemoScreen.list(title: "Home", rows: ["Weather"])) } }
+        try await Hands(channel: board.commands).home(checking: screen)
+        XCTAssertFalse(board.sent.contains("key cmd+h"))
+    }
+
+    func testExportRedaction() {
+        let r = Redactor(secrets: ["sk-ant-secret-key"], typed: ["I'm coming"])
+        let out = r.text("key sk-ant-secret-key typed I'm coming to azad@example.com, call +1 510 555 0199, code 123456")
+        XCTAssertFalse(out.contains("sk-ant"))
+        XCTAssertFalse(out.contains("I'm coming"))
+        XCTAssertFalse(out.contains("example.com"))
+        XCTAssertFalse(out.contains("555"))
+        XCTAssertFalse(out.contains("123456"))
+        XCTAssertTrue(out.contains("call"))
+    }
+
+    func testTrainingRedactionKeepsWordsAndShortNumbers() {
+        let r = Redactor(secrets: ["sk-ant-secret-key"])
+        XCTAssertEqual(r.light("Tap General at 300,560 code 482913"), "Tap General at 300,560 code [redacted]")
+    }
+}
