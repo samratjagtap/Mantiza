@@ -42,6 +42,22 @@ enum KeyStore {
         refreshRedaction()
     }
 
+    /// Debug builds only: the Mac can drop `Documents/import-<provider>.key` into the app container with
+    /// `xcrun devicectl device copy to` (see tools/e2e/phone.sh --key); it moves into the Keychain and the file is
+    /// deleted, so keys never travel in launch arguments or logs.
+    static func importDropped() {
+        #if DEBUG
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        for p in Provider.allCases {
+            let file = docs.appending(path: "import-\(p.rawValue).key")
+            guard let data = try? Data(contentsOf: file) else { continue }
+            try? FileManager.default.removeItem(at: file)
+            set(p, String(decoding: data, as: UTF8.self))
+            Log.event("keys.imported", ["provider": p.rawValue])
+        }
+        #endif
+    }
+
     /// Keep keys out of every log line.
     static func refreshRedaction() { Log.redact(Provider.allCases.compactMap(get)) }
 }

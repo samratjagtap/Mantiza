@@ -12,6 +12,7 @@ struct MantizaApp: App {
                 .environment(app)
                 .onAppear {
                     app.reloadCalibration()
+                    KeyStore.importDropped()
                     KeyStore.refreshRedaction()
                     Task { await Notifier.requestPermission() }
                 }
