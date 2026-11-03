@@ -127,3 +127,61 @@ struct FlakyBrain: BigBrain, @unchecked Sendable {
         XCTAssertEqual(phone.taps.count, 1)
     }
 }
+
+/// A screen whose last frame is old but which the system says is still current (or not).
+@MainActor final class IdleScreen: ScreenSource {
+    var latest: Frame?
+    var live = true
+    var confirmedAt: Date?
+    func start() async throws {}
+    func stop() async {}
+}
+
+@MainActor final class FreshnessTests: XCTestCase {
+    func testStillSignalAnswersAtOnce() async throws {
+        let screen = IdleScreen()
+        screen.latest = Frame(image: DemoScreen.settings(), id: 1, capturedAt: Date().addingTimeInterval(-10))
+        screen.confirmedAt = Date()
+        let started = Date()
+        _ = try await screen.frame(after: Date().addingTimeInterval(-1), timeout: 1)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 0.2)
+    }
+
+    func testWithoutStillSignalItWaits() async throws {
+        let screen = IdleScreen()
+        screen.latest = Frame(image: DemoScreen.settings(), id: 1, capturedAt: Date().addingTimeInterval(-10))
+        let started = Date()
+        _ = try await screen.frame(after: Date().addingTimeInterval(-1), timeout: 0.3)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.3)
+    }
+
+    func testIconTapIsDroppedWhenTheScreenMovedWhileDeciding() async {
+        let phone = FakePhone()
+        let plan = Subtask(goal: "Tap the icon", verification: ["x"], maxActions: 4)
+        let brain = MovingBrain(plan: plan, screen: phone.screen)
+        let runner = AgentRunner()
+        let outcome = await runner.run(plan, deps: phone.deps(brain))
+        XCTAssertEqual(outcome, .done("ok"))
+        XCTAssertTrue(phone.taps.isEmpty)
+        XCTAssertTrue(runner.steps.contains { $0.text.contains("screen moved while deciding") })
+    }
+}
+
+/// Changes the screen while "thinking" about the first decision, then proposes an icon tap on the old screen.
+struct MovingBrain: BigBrain, @unchecked Sendable {
+    final class Count: @unchecked Sendable { var n = 0 }
+    var name = "moving"
+    var plan: Subtask
+    let screen: StillScreen
+    let count = Count()
+    func plan(_ request: String) async throws -> Subtask { plan }
+    func decide(_ c: DecisionContext) async throws -> Decision {
+        count.n += 1
+        if count.n == 1 {
+            await MainActor.run { screen.show(DemoScreen.list(title: "Other", rows: ["A", "B"])) }
+            return Decision(action: .tap(element: nil, at: CGPoint(x: 0.5, y: 0.5)), reason: "", confidence: 1, source: "moving")
+        }
+        return Decision(action: .done("ok"), reason: "", confidence: 1, source: "moving")
+    }
+    func verify(_ s: Subtask, reading: ScreenReading, jpeg: Data?) async throws -> (done: Bool, reason: String) { (true, "ok") }
+}

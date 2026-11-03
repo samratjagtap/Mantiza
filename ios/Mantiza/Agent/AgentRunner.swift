@@ -310,6 +310,11 @@ import Observation
                         if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
                         continue
                     }
+                } else if label == nil, try await !stillCurrent(frame, d) {  // an icon tap has no text to re-find
+                    stale += 1
+                    note("the screen moved while deciding; looking again", ms: thinkMs)
+                    if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
+                    continue
                 }
                 let acted = Date()
                 let actStarted = Date()
@@ -328,6 +333,12 @@ import Observation
                     continue
                 }
                 if Safety.looksSecret(text) { return .blocked("That looks like a PIN, code or card number; Mantiza never types those.") }
+                if try await !stillCurrent(frame, d) {  // the field may have lost focus
+                    stale += 1
+                    note("the screen moved while deciding; looking again", ms: thinkMs)
+                    if stale > 3 { return .blocked("The screen keeps changing under the agent.") }
+                    continue
+                }
                 let acted = Date()
                 let actStarted = Date()
                 try await act { try await d.hands.type(text) }
@@ -386,6 +397,16 @@ import Observation
     }
 
     static let maxRejected = 3
+    /// How recent the screen must be (a new frame or a "still" signal) before a positional action.
+    static let freshness = 1.5
+
+    /// The screen may have moved while the brain was thinking: does it still match the frame the decision was
+    /// made on? Waits up to 1 s for a frame or a "nothing changed" signal newer than `freshness`.
+    private func stillCurrent(_ decided: Frame, _ d: Deps) async throws -> Bool {
+        let now = try await d.screen.frame(after: Date().addingTimeInterval(-Self.freshness), timeout: 1)
+        if now.id == decided.id { return true }
+        return await Task.detached(priority: .userInitiated) { !ScreenDiff.changed(decided.image, now.image) }.value
+    }
 
     /// Errors a fresh look and a new question can fix: unreadable answers and network trouble, not refusals,
     /// bad keys or rate limits.

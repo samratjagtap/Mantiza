@@ -11,19 +11,29 @@ struct ScreenError: LocalizedError {
 @MainActor protocol ScreenSource: AnyObject {
     var live: Bool { get }
     var latest: Frame? { get }
+    /// When `latest` was last known to still show the screen: its capture, or a later "nothing changed"
+    /// signal from the system (ScreenCaptureKit sends no new image while the screen is still).
+    var confirmedAt: Date? { get }
     func start() async throws
     func stop() async
 }
 
 extension ScreenSource {
-    /// The first frame captured after `date`, or the latest one if the screen did not change within `timeout`
-    /// (ScreenCaptureKit sends no frames while nothing on screen changes).
+    /// A tap's effect can take this long to reach the screen; a "still" signal earlier proves nothing.
+    static var changeDelay: Double { 0.15 }
+
+    /// Is `latest` known to be current within `seconds`?
+    func confirmed(within seconds: Double) -> Bool { Date().timeIntervalSince(confirmedAt ?? .distantPast) <= seconds }
+
+    /// The first frame captured after `date`; or the latest one once the system confirms the screen has not
+    /// changed since a little after `date`; or, failing both, the latest one after `timeout`.
     func frame(after date: Date, timeout: Double = 1) async throws -> Frame {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
             try Task.checkCancellation()
             guard live, let f = latest else { throw ScreenError.notSharing }
-            if f.capturedAt > date || Date() >= deadline { return f }
+            let stillAfter = (confirmedAt ?? .distantPast) > date.addingTimeInterval(Self.changeDelay)
+            if f.capturedAt > date || stillAfter || Date() >= deadline { return f }
             try await Task.sleep(for: .milliseconds(20))
         }
     }
@@ -54,6 +64,8 @@ extension ScreenSource {
 @MainActor final class StillScreen: ScreenSource {
     private(set) var latest: Frame?
     var live = true
+    /// A still image is always current.
+    var confirmedAt: Date? { latest == nil ? nil : Date() }
     private var nextID = 1
 
     func start() async throws { live = true }

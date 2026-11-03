@@ -13,6 +13,7 @@ import UIKit
 /// frame, at most 4 per second, scaled to at most 960 px wide. One stream lasts a whole task.
 @MainActor @Observable final class ScreenCaptureFeed: NSObject, ScreenSource {
     private(set) var latest: Frame?
+    @ObservationIgnored private(set) var confirmedAt: Date?
     private(set) var choosing = false
     private(set) var capturing = false
     private(set) var note = ""
@@ -105,11 +106,18 @@ import UIKit
                 guard let self, self.generation == id else { return }
                 self.frameID += 1
                 self.latest = Frame(image: image, id: self.frameID, capturedAt: captured)
+                self.confirmedAt = max(self.confirmedAt ?? captured, captured)
+            }
+        }, still: { [weak self] at in
+            Task { @MainActor in
+                guard let self, self.generation == id, self.latest != nil else { return }
+                self.confirmedAt = at
             }
         }, unavailable: { [weak self] in
             Task { @MainActor in
                 guard let self, self.generation == id else { return }
                 self.latest = nil
+                self.confirmedAt = nil
             }
         })
         let config = SCStreamConfiguration()
@@ -176,13 +184,16 @@ private final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable
     let queue = DispatchQueue(label: "screen.capture", qos: .userInitiated)
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let publish: @Sendable (CGImage, Date) -> Void
+    private let still: @Sendable (Date) -> Void
     private let unavailable: @Sendable () -> Void
     private var wasUnavailable = false
     private var enabled = true
     private var last = -Double.infinity
 
-    init(publish: @escaping @Sendable (CGImage, Date) -> Void, unavailable: @escaping @Sendable () -> Void) {
+    init(publish: @escaping @Sendable (CGImage, Date) -> Void, still: @escaping @Sendable (Date) -> Void,
+         unavailable: @escaping @Sendable () -> Void) {
         self.publish = publish
+        self.still = still
         self.unavailable = unavailable
     }
 
@@ -197,6 +208,10 @@ private final class CaptureOutput: NSObject, SCStreamOutput, @unchecked Sendable
             if !wasUnavailable { unavailable() }
             wasUnavailable = true
             last = -Double.infinity
+            return
+        }
+        if status == SCFrameStatus.idle.rawValue {  // nothing changed: the last frame is still the screen
+            if !wasUnavailable { still(Date()) }
             return
         }
         guard status == SCFrameStatus.complete.rawValue || status == SCFrameStatus.started.rawValue else { return }
