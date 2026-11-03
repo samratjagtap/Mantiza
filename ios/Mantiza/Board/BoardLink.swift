@@ -233,10 +233,22 @@ import Observation
 
     /// Prove to the stick that this is the owner's app (firmware 0.3.0+): pair a secret the first time (the user
     /// confirms the code on the stick), then answer its challenge and tag every following command.
+    /// The stick answers nothing while it asks the user something (up to 60 s), e.g. a pairing code that an
+    /// earlier launch of the app sent; keep asking for the status until it is free.
+    private func statusWhenFree() async throws -> String {
+        var attempt = 0
+        while true {
+            do { return try await commands.send(.status) } catch let e as BoardError where e.kind == .timeout && attempt < 13 {
+                attempt += 1
+                lastError = "Waiting for the stick to finish its question…"
+            }
+        }
+    }
+
     private func authenticate(_ p: CBPeripheral) async {
         let id = p.identifier
         do {
-            let status = BoardStatus.decode(try await commands.send(.status))
+            let status = BoardStatus.decode(try await statusWhenFree())
             if let state = status?.auth {
                 var secret = SessionAuth.secret(for: id)
                 if state == "none" || secret == nil {
@@ -244,8 +256,9 @@ import Observation
                     pairingCode = SessionAuth.code(fresh)
                     Log.event("board.pair_secret", ["code": pairingCode ?? ""])
                     defer { pairingCode = nil }
-                    try await commands.send(.secret(SessionAuth.hex(fresh)))
+                    // Saved first: if this app is closed while the stick asks, a later A still matches what we keep.
                     SessionAuth.store(fresh, for: id)
+                    try await commands.send(.secret(SessionAuth.hex(fresh)))
                     secret = fresh
                 }
                 guard let secret, let nonce = SessionAuth.unhex(try await commands.send(.hello)) else {
