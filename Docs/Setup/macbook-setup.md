@@ -9,13 +9,16 @@ iPhone apps can only be built with Apple's **Xcode**, and Xcode only runs on a *
 ---
 
 ## Still choosing a Mac?
-| Part | Recommended | Why |
+| Part | Needed | Why |
 |---|---|---|
-| Chip | Any **Apple silicon** (M-series) | Xcode needs it to run well; older Intel Macs can't run the newest Xcode |
-| Memory (RAM) | **16 GB** or more | Xcode + Simulator + browser fill 8 GB quickly |
-| Storage | **512 GB** or more | Xcode, the iOS tools and simulators take 50+ GB |
+| Chip | 🔴 **Apple silicon (M1 or newer)**, required | Mantiza needs the **iOS 27 SDK** (ScreenCaptureKit on iPhone), which only comes with **Xcode 27**. Xcode 27 "will only install and run on Apple silicon Macs" and needs **macOS Tahoe 26.6** or later. **No Intel Mac can do this**, even with unofficial macOS patchers |
+| Memory (RAM) | 16 GB recommended (8 GB works, slower) | Xcode + Simulator + browser fill 8 GB quickly |
+| Storage | 256 GB minimum, 512 GB recommended | Xcode, the iOS tools and simulators take 50+ GB |
 
-A used or refurbished M-series MacBook Air or Mac mini is enough.
+A used or refurbished **M1 or newer** MacBook Air or Mac mini is enough. No Mac? A rented cloud Apple-silicon Mac also works for building, but running on your own iPhone needs a cable or the same network, so a real Mac is easier.
+
+> [!WARNING]
+> **Checked 2026-11-05:** a MacBook Pro 13" 2016 (Intel, macOS Monterey 12.7.6) **can't** be used. Its newest Xcode is 14.2, which can't run apps on iPhones with iOS 17 or later, let alone iOS 27.
 
 ---
 
