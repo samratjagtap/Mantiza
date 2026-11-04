@@ -214,6 +214,9 @@ All of these plug in through Apple's `LanguageModel` protocol ("Anthropic and Go
 4. Small state: only on-screen items, downsized frames.
 5. Independent checks with on-device OCR instead of another AI call.
 6. Absolute pointer positioning if T1 shows it works (skips pointer correction).
+7. **Keyboard first, pointer last** _(added 2026-11-02; T1b 2026-11-03: Search, Return and Tab ✅, Fn ❌)_: ⌘+Space opens Search, so we open any app by typing its name + Enter (no icon hunt, no AI step); ⌘H for Home (✅ works, T1); Return to send messages where the app allows it (skips the icon-only Send button); Full Keyboard Access commands for App Switcher, Control Center and Notification Center (Apple's defaults use Fn/🌐, which our device can't send yet, so we remap them under **Commands**) [P42].
+8. **Extra mouse buttons as shortcuts** _(✅ works, T1b 2026-11-03)_: give the device buttons 4, 5, 6… and assign each to a system action (App Switcher, Notification Center, Control Center, Siri) under AssistiveTouch → Devices → **Customize Additional Buttons**. One button report, no pointer move.
+9. **iPhone settings tuned for speed:** Tracking Sensitivity max (fewer reports per move), Haptic Touch **Fast** (shorter long presses), **Prefer Single-Touch Actions** (taps instead of slides, iOS 26.1+). Full checklist for users: [README → Set up your iPhone](../../README.md#-set-up-your-iphone-for-mantiza).
 
 The user's own time (~6–12 s) becomes the biggest share; reusing the screen-capture session (T4) is the next win.
 
@@ -296,7 +299,7 @@ Example (large widget):
 | Chat | Typed English; the big brain understands it | ✅ |
 | Voice | Apple speech recognition (`SpeechTranscriber`) in English; check `supportedLocales` on device | ✅ English supported [P12] |
 | Fast picker | Jev is strongest in English [P31] | ⚠️ test T11 |
-| Typing into apps | The device types the text with keyboard key codes, as existing projects do [P1][P2][P3]. **Known issue:** capital letters and symbols may fail over Bluetooth on a combined mouse + keyboard 📰 (Fake Mouse doc, item 8). **Fallback:** clipboard + ⌘V paste (section 6.4, Method A) | ❓ test in T1 |
+| Typing into apps | The device types the text with keyboard key codes, as existing projects do [P1][P2][P3]. **Known issue:** capital letters and symbols may fail over Bluetooth on a combined mouse + keyboard 📰 (Fake Mouse doc, item 8). **Fallback:** clipboard + ⌘V paste (section 6.4, Method A) | ✅ Worked in T1 (2026-11-02) |
 | Device screen | English labels only; no special font needed | ✅ |
 
 **Walkthrough: "Mantiza, reply to Azad that I'm coming"** (times in section 4.4)
@@ -480,7 +483,8 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 ### Phase 0: Prove the risky parts (2 weeks)
 | # | Test | Pass condition |
 |---|---|---|
-| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works |
+| T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works <br>**Result (2026-11-02): ✅ PASS.** All 8 tests worked on iPhone 14 Plus (iOS 27.2), including capitals, symbols, ⌘V and ⌘H. Pointer moves are repeatable, and it reconnects after a device restart and after iPhone lock/unlock ([results](../../firmware/t1-hid-test/README.md#results)) |
+| T1b | **Keyboard shortcuts and extra buttons** (section 4.4, items 7–8) | ⌘+Space opens Search and an app opens by name; Return sends in Messages; which Full Keyboard Access commands work and can be remapped; whether extra mouse buttons can be assigned to system actions<br>**Result (2026-11-03): mostly ✅.** ⌘+Space Search, Return to send, Tab and extra buttons 4–5 work. Fn/🌐 from our device is ignored, so Fn+H/C/N/↑ fail; remapping still to test ([results](../../firmware/t1-hid-test/README.md#t1b-results)) |
 | T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background |
 | T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock |
 | T4 | Picker behaviour | Does it ask every task, or can a session be reused? |
@@ -533,6 +537,8 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 | Cloud AI cost and privacy | Cost per task; screenshots leave the phone | Downsized frames + OCR text; record-once replay (section 8) to cut AI calls; clear consent; block list |
 | Gemini's mobile computer use is Preview and Android-optimised | May behave worse on iPhone screens | Compare in T8; Claude as alternative [P27][P28] |
 | Taps land in the wrong place | Wrong actions | Absolute positioning, OCR targets, verify every step, approval before irreversible actions |
+| User has **Confirm with AssistiveTouch** on | The device could approve Apple Pay or purchases | Setup checklist says Off ([README](../../README.md#-set-up-your-iphone-for-mantiza)); the device never sends the confirm action |
+| **Dwell Control** or **Snap to Item** on | Accidental taps while the AI thinks; pointer lands off target | Setup checklist says Off; the app checks taps land where expected |
 | Battery life too short | Device dies mid-task | Screen sleep, deep sleep, larger battery in the custom device |
 | Other apps' terms of use | Accounts flagged for automation | Personal use first; avoid social media automation (one project reports shadow-bans 📰 [Fake Mouse doc]) |
 | Fast-moving competition | Others add similar features | Focus on our differences: speed (two brains), widget, safety, dedicated device, then languages |
@@ -598,3 +604,4 @@ We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **r
 | P39 | [AndroidDaily: benchmark for mobile GUI agents on real apps (arXiv 2605.27761)](https://arxiv.org/html/2605.27761v1) |
 | P40 | [AppAgentX: evolving GUI agents (arXiv 2503.02268)](https://arxiv.org/html/2503.02268v3) |
 | P41 | [TypeSafe docs: Images (preview)](https://docs.typesafe.ai/images.md) |
+| P42 | [Apple Support: Control iPhone with an external keyboard (Full Keyboard Access)](https://support.apple.com/en-bn/guide/iphone/ipha4375873f/ios) |
