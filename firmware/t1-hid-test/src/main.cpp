@@ -1,7 +1,10 @@
-// Mantiza Phase 0, tests T1 and T1b
+// Mantiza Phase 0, tests T1, T1b and T2
 // StickS3 acts as a Bluetooth LE mouse + keyboard for an iPhone (AssistiveTouch pointer).
 // T1b adds key combinations (Command+Space, Return, Tab, arrows), an experimental
 // Fn/Globe key and mouse buttons 4..8.
+// T2 adds a private "command channel" service: the Mantiza test app writes the same
+// text commands as the serial port ("m 100 0", "t hello", "ping 3") and the device
+// answers with notifications ("pong 3", "ask 5", "ok ...").
 //
 // Buttons:  KEY2 (side)  = select next test
 //           KEY1 (front) = run the selected test
@@ -12,7 +15,12 @@
 #include <NimBLEHIDDevice.h>
 #include <Preferences.h>
 
-static const char* DEVICE_NAME = "Mantiza T1";
+static const char* DEVICE_NAME = "Mantiza T2";
+
+// T2 command channel (must match the app, apps/phase0-test)
+static const char* COMMAND_SERVICE_UUID = "f665cd1c-b15f-4ffa-b950-9d0f007b7db5";
+static const char* COMMAND_WRITE_UUID   = "2af74626-d331-4239-bd47-2ef715cab51e";  // app -> device
+static const char* COMMAND_EVENT_UUID   = "7a537076-9f59-4e6d-94eb-c90356cea6f3";  // device -> app (notify)
 
 // ---------------------------------------------------------------------------
 // HID report map: keyboard (report 1) + relative mouse (report 2)
@@ -20,9 +28,10 @@ static const char* DEVICE_NAME = "Mantiza T1";
 static const uint8_t REPORT_ID_KEYBOARD = 1;
 static const uint8_t REPORT_ID_MOUSE    = 2;
 
-// Bump this whenever REPORT_MAP changes. The iPhone caches the report map of a
-// paired device, so a change needs a fresh pairing: old bonds are cleared on boot.
-static const uint32_t REPORT_MAP_VERSION = 2;
+// Bump this whenever REPORT_MAP or the list of services changes. The iPhone caches
+// both for a paired device, so a change needs a fresh pairing: old bonds are cleared on boot.
+// 3 = T2 command channel added.
+static const uint32_t REPORT_MAP_VERSION = 3;
 
 static const uint8_t REPORT_MAP[] = {
   // Keyboard
@@ -86,6 +95,13 @@ static NimBLECharacteristic* keyboardInput = nullptr;
 static NimBLECharacteristic* mouseInput    = nullptr;
 static volatile bool         connected     = false;
 
+// T2: commands written by the app arrive on the Bluetooth task; they are queued
+// and run in loop() so mouse/keyboard timing stays on one task.
+struct AppCommand { char text[160]; };
+static QueueHandle_t         appQueue      = nullptr;
+static NimBLECharacteristic* eventOutput   = nullptr;
+static volatile bool         appLinked     = false;  // app subscribed to events
+
 class ServerCallbacks : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer* server, ble_gap_conn_desc* desc) override {
     connected = true;
@@ -93,6 +109,7 @@ class ServerCallbacks : public NimBLEServerCallbacks {
   }
   void onDisconnect(NimBLEServer* server) override {
     connected = false;
+    appLinked = false;
     Serial.println("[ble] disconnected, advertising again");
     NimBLEDevice::startAdvertising();
   }
@@ -102,6 +119,32 @@ class ServerCallbacks : public NimBLEServerCallbacks {
                   desc->sec_state.bonded);
   }
 };
+
+class CommandWriteCallbacks : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* c) override {
+    NimBLEAttValue v = c->getValue();
+    AppCommand cmd;
+    size_t n = min((size_t)v.length(), sizeof(cmd.text) - 1);
+    memcpy(cmd.text, v.data(), n);
+    cmd.text[n] = 0;
+    if (xQueueSend(appQueue, &cmd, 0) != pdTRUE) Serial.println("[t2] queue full, command dropped");
+  }
+};
+
+class CommandEventCallbacks : public NimBLECharacteristicCallbacks {
+  void onSubscribe(NimBLECharacteristic* c, ble_gap_conn_desc* desc, uint16_t subValue) override {
+    appLinked = (subValue != 0);
+    Serial.printf("[t2] app %s\n", appLinked ? "linked" : "unlinked");
+  }
+};
+
+// Sends a text event to the app (no-op if the app isn't listening).
+static void sendEvent(const String& text) {
+  if (!eventOutput) return;
+  eventOutput->setValue((const uint8_t*)text.c_str(), text.length());
+  eventOutput->notify();
+  Serial.printf("[t2] -> app: %s\n", text.c_str());
+}
 
 static void setupBluetooth() {
   NimBLEDevice::init(DEVICE_NAME);
@@ -133,12 +176,21 @@ static void setupBluetooth() {
   hid->startServices();
   hid->setBatteryLevel(M5.Power.getBatteryLevel());
 
+  NimBLEService* commandService = server->createService(COMMAND_SERVICE_UUID);
+  NimBLECharacteristic* commandWrite = commandService->createCharacteristic(
+      COMMAND_WRITE_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+  commandWrite->setCallbacks(new CommandWriteCallbacks());
+  eventOutput = commandService->createCharacteristic(
+      COMMAND_EVENT_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
+  eventOutput->setCallbacks(new CommandEventCallbacks());
+  commandService->start();
+
   NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
   adv->setAppearance(0x03C2);  // HID mouse
   adv->addServiceUUID(hid->hidService()->getUUID());
   adv->setScanResponse(true);
   adv->start();
-  Serial.println("[ble] advertising as \"Mantiza T1\"");
+  Serial.printf("[ble] advertising as \"%s\"\n", DEVICE_NAME);
 }
 
 // ---------------------------------------------------------------------------
@@ -327,7 +379,29 @@ static void testFnUp()    { sendCombo("fn+up"); }
 static void testButton4() { mouseButtonClick(4); }
 static void testButton5() { mouseButtonClick(5); }
 
+// T2: the device asks the app ("ask N") and counts the app's answers ("ack N").
+// This shows whether the app answers while it is in the background.
+static uint32_t askSent = 0, askAnswered = 0, askSentAt = 0, lastAskMs = 0;
+static uint32_t beatsReceived = 0, lastBeatAt = 0;
+static bool     autoAsk = false;
+static const uint32_t AUTO_ASK_EVERY_MS = 5000;
+
+static void sendAsk() {
+  askSent++;
+  askSentAt = millis();
+  sendEvent("ask " + String(askSent));
+}
+static void resetT2Counts() { askSent = askAnswered = lastAskMs = beatsReceived = 0; }
+static void testAsk()     { sendAsk(); }
+static void testAutoAsk() {
+  autoAsk = !autoAsk;
+  resetT2Counts();
+  Serial.printf("[t2] auto ask %s\n", autoAsk ? "ON" : "OFF");
+}
+
 static const Test TESTS[] = {
+  {"2 Ask app once",   testAsk},
+  {"2 Auto ask 5s",    testAutoAsk},
   {"b Search Notes",   testSearch},
   {"b Type+Return",    testReturn},
   {"b Tab (FKA)",      testTab},
@@ -361,7 +435,10 @@ static void drawScreen() {
 
   d.setTextColor(TFT_CYAN, TFT_BLACK);
   d.setCursor(4, 4);
-  d.print("Mantiza T1 + T1b");
+  d.print("Mantiza T2");
+  d.setCursor(78, 4);
+  d.setTextColor(appLinked ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+  d.print(appLinked ? "App:on" : "App:--");
 
   d.setCursor(4, 18);
   d.setTextColor(connected ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
@@ -384,9 +461,11 @@ static void drawScreen() {
     d.printf("%s %s", sel ? ">" : " ", TESTS[i].name);
   }
 
-  d.setTextColor(TFT_YELLOW, TFT_BLACK);
+  // T2 counters: A = asks answered / sent, last answer time; B = app heartbeats
+  d.setTextColor(autoAsk ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
   d.setCursor(4, 200);
-  d.print("Last:");
+  d.printf("A%u/%u %ums B%u", askAnswered, askSent, lastAskMs, beatsReceived);
+  d.setTextColor(TFT_YELLOW, TFT_BLACK);
   d.setCursor(4, 212);
   d.print(lastAction.substring(0, 21));
   d.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
@@ -424,14 +503,47 @@ static void printHelp() {
     "  k <combo>          key combination, e.g. k cmd+space, k enter, k tab+h, k fn+c\n"
     "  K <ms> <combo>     same, but hold the keys for <ms> first\n"
     "  b <1-8>            click mouse button 1..8\n"
-    "  help               this list");
+    "  ask                T2: ask the app once (app answers \"ack N\")\n"
+    "  help               this list\n"
+    "From the app only: ping <n> (-> pong <n>), ack <n>, beat <n>, hello");
 }
 
-static void handleCommand(String line) {
+// Answers to the serial port, and also to the app if the command came from it.
+static void reply(const String& text, bool fromApp) {
+  Serial.println(text);
+  if (fromApp) sendEvent(text);
+}
+
+static bool wordIs(const String& line, const char* word) {
+  size_t n = strlen(word);
+  return line.startsWith(word) && (line.length() == n || line.charAt(n) == ' ');
+}
+
+static void handleCommand(String line, bool fromApp = false) {
   line.trim();
   if (line.isEmpty()) return;
+  if (fromApp) Serial.printf("[t2] <- app: %s\n", line.c_str());
+
+  // T2 words first ("ping" would otherwise be read as "p" = paste, "hello" as "h" = home).
+  long num = line.indexOf(' ') > 0 ? line.substring(line.indexOf(' ') + 1).toInt() : 0;
+  if (wordIs(line, "ping"))  { sendEvent("pong " + String(num)); return; }
+  if (wordIs(line, "hello")) { sendEvent("hi " + String(DEVICE_NAME) + " battery " + String((int)M5.Power.getBatteryLevel()) + "%"); return; }
+  if (wordIs(line, "ack")) {
+    askAnswered++;
+    if ((uint32_t)num == askSent) lastAskMs = millis() - askSentAt;
+    lastAction = "app ack " + String(num) + " " + String(lastAskMs) + "ms";
+    return;
+  }
+  if (wordIs(line, "beat")) {
+    beatsReceived++;
+    lastBeatAt = millis();
+    lastAction = "app beat " + String(num);
+    return;
+  }
+  if (wordIs(line, "ask")) { sendAsk(); reply("ok", fromApp); return; }
+
   if (!connected && line != "help") {
-    Serial.println("not connected to the iPhone yet");
+    reply("not connected to the iPhone yet", fromApp);
     return;
   }
   char cmd = line.charAt(0);
@@ -450,15 +562,15 @@ static void handleCommand(String line) {
   else if (cmd == 't')                typeText(args.c_str());
   else if (cmd == 'p')                pasteCmdV();
   else if (cmd == 'h')                homeCmdH();
-  else if (cmd == 'k' && !args.isEmpty()) { if (!sendCombo(args)) return; }
+  else if (cmd == 'k' && !args.isEmpty()) { if (!sendCombo(args)) { reply("error " + line, fromApp); return; } }
   else if (cmd == 'K' && sscanf(args.c_str(), "%d", &a) == 1 && args.indexOf(' ') > 0) {
-    if (!sendCombo(args.substring(args.indexOf(' ') + 1), a)) return;
+    if (!sendCombo(args.substring(args.indexOf(' ') + 1), a)) { reply("error " + line, fromApp); return; }
   }
   else if (cmd == 'b' && sscanf(args.c_str(), "%d", &a) == 1 && a >= 1 && a <= 8) mouseButtonClick(a);
-  else { Serial.println("unknown command, type: help"); return; }
+  else { reply("unknown command: " + line, fromApp); return; }
 
-  lastAction = line.substring(0, 21);
-  Serial.println("ok");
+  lastAction = (fromApp ? "app: " : "") + line.substring(0, fromApp ? 16 : 21);
+  reply("ok " + line, fromApp);
 }
 
 // ---------------------------------------------------------------------------
@@ -471,16 +583,31 @@ void setup() {
   M5.Display.setRotation(0);
   M5.Display.setBrightness(80);
 
+  appQueue = xQueueCreate(16, sizeof(AppCommand));
   setupBluetooth();
   drawScreen();
-  Serial.println("Mantiza T1 + T1b ready. Type: help");
+  Serial.println("Mantiza T2 ready. Type: help");
 }
 
 void loop() {
   M5.update();
-  static bool wasConnected = false;
-  bool redraw = (connected != wasConnected);
+  static bool wasConnected = false, wasLinked = false;
+  bool redraw = (connected != wasConnected) || (appLinked != wasLinked);
   wasConnected = connected;
+  wasLinked = appLinked;
+
+  AppCommand appCmd;                   // T2: commands from the app
+  while (xQueueReceive(appQueue, &appCmd, 0) == pdTRUE) {
+    handleCommand(String(appCmd.text), true);
+    redraw = true;
+  }
+
+  static uint32_t lastAutoAsk = 0;     // T2: ask the app every 5 s
+  if (autoAsk && connected && millis() - lastAutoAsk >= AUTO_ASK_EVERY_MS) {
+    lastAutoAsk = millis();
+    sendAsk();
+    redraw = true;
+  }
 
   if (M5.BtnB.wasPressed()) {          // KEY2 (side): next test
     selectedTest = (selectedTest + 1) % TEST_COUNT;
