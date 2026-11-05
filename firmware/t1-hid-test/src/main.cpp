@@ -399,7 +399,24 @@ static void testAutoAsk() {
   Serial.printf("[t2] auto ask %s\n", autoAsk ? "ON" : "OFF");
 }
 
+// T4d: the device starts screen sharing with no touch on the phone. It opens the
+// test app through Search and tells it to share; the app shows the picker and has
+// the device click the picker's share button ("tap x y").
+static void testShare() {
+  sendCombo("cmd+space");
+  delay(800);                 // wait for Search to open
+  typeText("Mantiza Test");
+  delay(700);                 // wait for results
+  sendKey(0, KEY_ENTER);
+  delay(1500);                // wait for the app to come to the front
+  sendEvent("share");
+}
+
+// Moves the pointer to a spot counted from the top-left corner.
+static void goTo(int x, int y) { cornerReset(); delay(100); mouseMove(x, y); }
+
 static const Test TESTS[] = {
+  {"4 Share screen",   testShare},
   {"2 Ask app once",   testAsk},
   {"2 Auto ask 5s",    testAutoAsk},
   {"b Search Notes",   testSearch},
@@ -504,6 +521,9 @@ static void printHelp() {
     "  K <ms> <combo>     same, but hold the keys for <ms> first\n"
     "  b <1-8>            click mouse button 1..8\n"
     "  ask                T2: ask the app once (app answers \"ack N\")\n"
+    "  go <x> <y>         T4d: pointer to x,y counted from the top-left corner\n"
+    "  tap <x> <y>        T4d: same, then click\n"
+    "  share              T4d: open Mantiza Test and ask it to share the screen\n"
     "  help               this list\n"
     "From the app only: ping <n> (-> pong <n>), ack <n>, beat <n>, hello");
 }
@@ -541,6 +561,23 @@ static void handleCommand(String line, bool fromApp = false) {
     return;
   }
   if (wordIs(line, "ask")) { sendAsk(); reply("ok", fromApp); return; }
+  if (wordIs(line, "shared")) {        // T4d: the app reports the result of "share"
+    lastAction = line.substring(0, 21);
+    Serial.printf("[t4d] %s\n", line.c_str());
+    return;
+  }
+
+  int gx = 0, gy = 0;                  // T4d: go / tap at a spot from the top-left corner
+  bool isGo = wordIs(line, "go"), isTap = wordIs(line, "tap");
+  if ((isGo || isTap) && !connected) { reply("not connected to the iPhone yet", fromApp); return; }
+  if ((isGo || isTap) && sscanf(line.c_str() + (isGo ? 2 : 3), "%d %d", &gx, &gy) == 2) {
+    goTo(gx, gy);
+    if (isTap) { delay(150); mouseClick(); }
+    lastAction = line.substring(0, 21);
+    reply("ok " + line, fromApp);
+    return;
+  }
+  if (wordIs(line, "share")) { if (connected) testShare(); reply("ok share", fromApp); return; }
 
   if (!connected && line != "help") {
     reply("not connected to the iPhone yet", fromApp);

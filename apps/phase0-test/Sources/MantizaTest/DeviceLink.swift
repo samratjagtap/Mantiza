@@ -33,6 +33,9 @@ final class DeviceLink: NSObject, ObservableObject {
     @Published var beatsSent = 0
     @Published var beating = false
 
+    /// T4d: called when the device sends "share".
+    var onShare: (() -> Void)?
+
     private var central: CBCentralManager!
     private var device: CBPeripheral?
     private var writeChar: CBCharacteristic?
@@ -178,6 +181,9 @@ final class DeviceLink: NSObject, ObservableObject {
             asksAnswered += 1
             if inBackground { asksInBackground += 1 }
             note("ask \(number) answered\(inBackground ? " in the BACKGROUND" : "")")
+        case "share":
+            note("device: share")
+            onShare?()
         default:
             note("device: \(text)")
         }

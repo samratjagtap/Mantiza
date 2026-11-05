@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CaptureView: View {
     @EnvironmentObject var capture: ScreenCapture
+    @EnvironmentObject var share: ShareByDevice
 
     var body: some View {
         NavigationStack {
@@ -34,6 +35,27 @@ struct CaptureView: View {
                 }
 
                 Section {
+                    Button("1. Calibrate pointer") { share.startCalibration() }
+                    Text(share.calibration).font(.callout)
+                    HStack {
+                        Text("2. Share button at")
+                        TextField("x", text: $share.buttonX).keyboardType(.decimalPad)
+                        TextField("y", text: $share.buttonY).keyboardType(.decimalPad)
+                        Text("pt")
+                    }
+                    Stepper(String(format: "Wait before click: %.1f s", share.waitBeforeClick),
+                            value: $share.waitBeforeClick, in: 0.5...5, step: 0.5)
+                    Button("Save") { share.saveButton() }
+                    Button("3. Try now (app asks the device to click)") { share.share(fromDevice: false) }
+                    LabeledContent("Result", value: share.lastResult)
+                    LabeledContent("Worked", value: "\(share.successes) of \(share.tries)")
+                } header: {
+                    Text("T4d · Device presses the share button")
+                } footer: {
+                    Text("Step 1 once: the device clicks 3 spots on a yellow screen. Step 2: the button's spot from a screenshot of the picker (pixels ÷ 3). Step 3 tests the click. Then the real test: stop capture, go to the Home Screen, and on the StickS3 run \"4 Share screen\".")
+                }
+
+                Section {
                     if capture.thumbs.isEmpty {
                         Text("A thumbnail is saved every 20 s while capturing.")
                             .foregroundStyle(.secondary)
@@ -63,6 +85,7 @@ struct CaptureView: View {
                 }
             }
             .navigationTitle("Mantiza T3/T4")
+            .fullScreenCover(isPresented: $share.calibrating) { CalibrationCatcher() }
         }
     }
 }

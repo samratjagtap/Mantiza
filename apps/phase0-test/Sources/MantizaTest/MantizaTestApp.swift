@@ -4,6 +4,7 @@ import SwiftUI
 struct MantizaTestApp: App {
     @StateObject private var link = DeviceLink()
     @StateObject private var capture = ScreenCapture()
+    @StateObject private var share = ShareByDevice()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -18,7 +19,13 @@ struct MantizaTestApp: App {
             }
             .environmentObject(link)
             .environmentObject(capture)
-            .onAppear { capture.link = link }
+            .environmentObject(share)
+            .onAppear {
+                capture.link = link
+                share.link = link
+                share.capture = capture
+                link.onShare = { [weak share = share] in share?.share(fromDevice: true) }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             link.note("App is now \(phase == .active ? "in front" : phase == .background ? "in the background" : "inactive")")
