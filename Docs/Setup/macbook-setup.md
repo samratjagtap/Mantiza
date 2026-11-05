@@ -1,6 +1,9 @@
 # MacBook setup for Mantiza
 
-iPhone apps can only be built with Apple's **Xcode**, and Xcode only runs on a **Mac**. This guide takes a new MacBook from first boot to running a test app on your iPhone. After that we can build the Mantiza test app for Phase 0 tests **T2, T3, T4 and T12** ([plan, section 11](../Mantiza%20Roadmap/mantiza-v2-plan.md)).
+> [!NOTE]
+> **No Mac yet?** Phase 0 test apps can be built on Windows with xtool: see [Windows setup with xtool](windows-xtool-setup.md). A Mac is still needed later for the home screen widget, TestFlight and the App Store.
+
+Apple's official tool for iPhone apps is **Xcode**, and Xcode only runs on a **Mac**. This guide takes a new MacBook from first boot to running a test app on your iPhone. After that we can build the Mantiza test app for Phase 0 tests **T2, T3, T4 and T12** ([plan, section 11](../Mantiza%20Roadmap/mantiza-v2-plan.md)).
 
 **Time:** about 2–3 hours, mostly waiting for downloads (Xcode alone is several GB).
 

@@ -493,6 +493,8 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 | T11 | **Jev vs big brain** on ~20 real English app screens: Jev with the OCR-built list vs Claude/Gemini with the screenshot | Seconds per decision (measured from India), correct pick rate, how often icon-only buttons force a fallback. **Pass:** Jev about as accurate and clearly faster → keep two brains; otherwise big brain only |
 | T12 | **End-to-end timing** of the Azad task (section 4.4) | Real seconds for each stage, first run and learned run, logged per request |
 
+**Build route for the test apps (2026-11-05):** ✅ the T2/T3/T4 test app can be built on **Windows with [xtool](https://github.com/xtool-org/xtool)**, no Mac needed. A "Hello" app built, installed and ran on the iPhone ([setup](../Setup/windows-xtool-setup.md)). A Mac or cloud Mac is still needed for the widget (open xtool bugs) and for TestFlight/App Store.
+
 **Exit:** every test has a recorded result; design updated where something failed.
 
 **Later (Hindi phase, not Phase 0):**
