@@ -57,19 +57,6 @@ struct ContentView: View {
                     Text("Start, then leave this app. The device's B number shows whether the app keeps sending from the background.")
                 }
 
-                Section {
-                    Button("Clear log and counts", role: .destructive) { link.resetCounts() }
-                    ForEach(link.log) { line in
-                        HStack(alignment: .top) {
-                            Text(line.time, format: .dateTime.hour().minute().second())
-                                .foregroundStyle(.secondary)
-                            Text(line.text)
-                        }
-                        .font(.caption.monospaced())
-                    }
-                } header: {
-                    Text("Log")
-                }
             }
             .navigationTitle("Mantiza T2")
         }

@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(
     name: "MantizaTest",
     platforms: [
-        .iOS(.v17),
+        .iOS("27.0"),  // ScreenCaptureKit on iPhone needs iOS 27
         .macOS(.v14),
     ],
     products: [

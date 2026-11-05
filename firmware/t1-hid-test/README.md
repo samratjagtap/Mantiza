@@ -179,11 +179,11 @@ Date: **2026-11-05** · iPhone 14 Plus · iOS 27.0.1 (as reported over USB)
 |---|---|---|---|
 | T2a | Found by / Ready | ✅ | Found by: **Already connected (Mantiza service)** |
 | T2a | Ping ×10 | ✅ | 10/10, avg **52 ms**, max **94 ms** |
-| T2b | Pointer square from the app | ? | To confirm |
+| T2b | Pointer square from the app | ✅ | |
 | T2b | Typing from the app | ✅ | Text appeared in the app's box |
 | T2c | Asks answered in the background | ✅ | Device **A 96/96**, 53 answered with the app in the background, last answer **81 ms** |
-| T2c | While locked | ? | To test |
-| T2d | App heartbeat in the background | ? | B kept matching (32), but auto-ask was on and may have kept the app awake. Retest with auto-ask off |
+| T2c | While locked | ✅ | Counts kept matching |
+| T2d | App heartbeat in the background | ✅ | Retested with auto-ask off: device **B** matched the app's beats ("everything matches") |
 | – | Mouse still works normally with the app linked | ✅ | |
 
 ## Troubleshooting

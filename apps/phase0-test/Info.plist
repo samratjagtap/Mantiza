@@ -6,9 +6,12 @@
 	<string>Mantiza Test</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Mantiza Test talks to the Mantiza device over Bluetooth.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Mantiza Test records the screen to check that capture keeps working while other apps are in front.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>
+		<string>screen-capture</string>
 	</array>
 </dict>
 </plist>
