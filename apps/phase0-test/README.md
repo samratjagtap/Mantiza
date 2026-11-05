@@ -22,17 +22,19 @@ How it works on iPhone (from the iOS 27.1 SDK headers): the app shows Apple's **
 | – | Watch the top of the screen while capturing | Is there a recording indicator (red pill / dot)? |
 
 ### T3 / T4 results
-Date: ____ · iPhone 14 Plus · iOS ____
+Date: 2026-11-05 · iPhone 14 Plus · iOS 27
 
 | # | Test | Result | Notes |
 |---|---|---|---|
-| T3a | Capture starts from the picker | | |
-| T3b | Keeps capturing with other apps in front (5 min) | | Frames total / in background: |
-| T3c | Phone locked | | Log message / code: |
-| T4a | Restart without picker | | |
-| T4b | Picker again: asks every time? | | |
-| T4c | After app relaunch | | |
-| – | Recording indicator | | |
+| T3a | Capture starts from the picker | ✅ | |
+| T3b | Keeps capturing with other apps in front (5 min) | ✅ | Frames showed the other apps. The T2 Bluetooth heartbeat kept running alongside |
+| T3c | Phone locked | ❌ stops | iOS ends the capture when the phone locks |
+| T4a | Restart without picker | ❌ | "Start failed": a stopped capture can't reuse the earlier choice |
+| T4b | Picker again: asks every time? | Asks every time | |
+| T4c | After app relaunch | not recorded | Expected to ask, since T4b already asks |
+| – | Recording indicator | Shown | Red indicator while capturing |
+
+**What this means for Mantiza:** start capture once and keep it running between tasks; don't start one per task. The user then sees the picker about once per phone unlock, not once per task. When the phone locks, the app should notice the stop and ask again at the next task.
 
 ## Build and install (Windows)
 Needs the [Windows xtool setup](../../Docs/Setup/windows-xtool-setup.md) and the iPhone bridge running. Then, in Ubuntu:
