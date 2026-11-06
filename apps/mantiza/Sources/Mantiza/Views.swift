@@ -88,10 +88,16 @@ struct DeviceView: View {
                 }
 
                 Section {
-                    Text(pointer.calibration)
-                    Button("Calibrate pointer") { pointer.startCalibration() }.disabled(!link.ready || pointer.calibrating)
+                    if link.absolute == true {
+                        Text("✅ Jumps straight to each point: no calibration needed")
+                    } else {
+                        Text(pointer.calibration)
+                        Button("Calibrate pointer") { pointer.startCalibration() }.disabled(!link.ready || pointer.calibrating)
+                    }
                 } header: { Text("2 · Pointer") } footer: {
-                    Text("The device clicks 3 spots and the app measures where they land (about 10 s). Do it again if you change the tracking speed.")
+                    Text(link.absolute == true
+                         ? "The device uses an absolute pointer (new firmware)."
+                         : "Old firmware: the device clicks 3 spots and the app measures where they land (about 10 s).")
                 }
 
                 Section {

@@ -29,6 +29,9 @@ final class DeviceLink: NSObject, ObservableObject {
     @Published var status = "Not connected"
     @Published var ready = false
     @Published var battery = "–"
+    /// The device's pointer jumps to exact points (firmware/mantiza-device, ABSOLUTE_POINTER=1).
+    /// nil until the device has said hello.
+    @Published var absolute: Bool?
     @Published var log: [LogLine] = []
 
     /// Called when the device sends "share" (its own menu item 4 asks the app to start sharing).
@@ -127,6 +130,7 @@ final class DeviceLink: NSObject, ObservableObject {
         switch parts.first {
         case "hi":
             if let i = parts.firstIndex(of: "battery"), i + 1 < parts.count { battery = String(parts[i + 1]) }
+            if let i = parts.firstIndex(of: "abs"), i + 1 < parts.count { absolute = parts[i + 1] == "1" } else { absolute = false }
             note("device: \(text)")
         case "share":
             onShare?()

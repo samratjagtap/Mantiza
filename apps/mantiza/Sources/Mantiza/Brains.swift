@@ -187,7 +187,8 @@ final class BigBrain {
         let prompt = """
         This is an iPhone screenshot. Goal: \(goal)
         Steps already done: \(done)
-        Where should the user tap next? Give the point on a 0-1000 grid (0,0 top-left, 1000,1000 bottom-right).
+        Where should the user tap next? To turn a setting on or off, tap its switch (toggle), not its label.
+        Give the point on a 0-1000 grid (0,0 top-left, 1000,1000 bottom-right).
         Reply with only JSON: {"x": <x>, "y": <y>, "what": "<short label of the thing to tap>"}
         """
         let obj = try await generate(parts: [

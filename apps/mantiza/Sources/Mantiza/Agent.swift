@@ -105,7 +105,8 @@ final class Agent: ObservableObject {
         var typed = false
         var history: [String] = []
         var lastPoint: CGPoint?
-        var noChangeTaps = 0
+        var lastLabel = ""
+        var lastScreen = ""  // the text on screen before the last tap
         let maxSteps = min(max(task.max_steps ?? 10, 4), 20)
 
         for n in 1...maxSteps {
@@ -119,13 +120,15 @@ final class Agent: ObservableObject {
                 end("❌ Couldn't prepare the screenshot"); return
             }
             let readTime = seconds(since: t)
+            let screenText = items.map(\.text).joined(separator: "|")
+            let unchanged = !lastScreen.isEmpty && screenText == lastScreen
 
             // Fast brain
             status = "Step \(n): deciding…"
             t = Date()
             var actions: [(value: String, description: String)] = [
-                ("tap", "tap one of the numbered pink boxes"),
-                ("icon", "tap a button or icon that has no number (for example a send arrow, back arrow, plus or a picture)"),
+                ("tap", "tap one of the numbered pink boxes (tapping that text itself does what is needed)"),
+                ("icon", "tap something with no number: a switch (toggle), a send arrow, back arrow, plus or a picture. To turn a setting on or off, choose this: the switch must be tapped, not its label"),
             ]
             if let text = task.text, !typed {
                 actions.append(("type", "type the text \"\(text)\" (only if a text field is selected, the keyboard is showing and the text is not there yet)"))
@@ -172,8 +175,13 @@ final class Agent: ObservableObject {
                 continue
             case "tap" where action.confidence >= sure:
                 if let target, target.confidence >= sure, let item = items.first(where: { "\($0.number)" == target.value }) {
-                    point = item.center
-                    label = item.text
+                    if unchanged && item.text == lastLabel {
+                        // Same choice as last time, and the last tap changed nothing: let the big brain look.
+                        history.append("tapping \"\(item.text)\" changed nothing")
+                    } else {
+                        point = item.center
+                        label = item.text
+                    }
                 }
             default:
                 break
@@ -202,18 +210,17 @@ final class Agent: ObservableObject {
 
             // Don't keep tapping the same spot if nothing happens
             let screenPoint = toScreen(tapAt, frame: frame)
-            if let last = lastPoint, hypot(last.x - screenPoint.x, last.y - screenPoint.y) < 12, noChangeTaps >= 1 {
+            if unchanged, let last = lastPoint, hypot(last.x - screenPoint.x, last.y - screenPoint.y) < 12 {
                 end("❌ Stuck: tapping \"\(label)\" doesn't change the screen"); return
             }
-            let framesBefore = capture.frameCount
             status = "Step \(n): tapping \"\(label)\""
             t = Date()
             guard await pointer.tap(screenPoint) else { end("❌ The device didn't tap"); return }
             add("Step \(n): tapped \"\(label)\" · read \(readTime), decide \(decideTime), tap \(seconds(since: t))", image: shot)
             history.append("tapped \"\(label)\"")
-            try? await Task.sleep(for: .milliseconds(300))
-            noChangeTaps = capture.frameCount == framesBefore ? noChangeTaps + 1 : 0
             lastPoint = screenPoint
+            lastLabel = label
+            lastScreen = screenText
         }
         end("❌ Gave up after \(maxSteps) steps")
     }

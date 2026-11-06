@@ -22,7 +22,7 @@ The real Mantiza app: you type what you want, and Mantiza does it on the iPhone 
 | Fast brain | OpenAI GPT-6 Luna Decisions. It uses `OPENAI_API_KEY` if set, otherwise OpenRouter (`OPENROUTER_API_KEY`) |
 | Big brain | Gemini 3.5 Flash-Lite through Google AI Studio (`GEMINI_API_KEY`) |
 | Eyes | ScreenCaptureKit + Apple Vision text recognition |
-| Hands | The Mantiza device as a Bluetooth mouse and keyboard ([firmware](../../firmware/t1-hid-test/README.md)) |
+| Hands | The Mantiza device as a Bluetooth mouse (absolute pointer: jumps straight to each point) and keyboard ([firmware](../../firmware/mantiza-device/README.md)) |
 
 These choices come from the [brain bench](../../tools/brain-bench/README.md).
 
@@ -32,7 +32,7 @@ These choices come from the [brain bench](../../tools/brain-bench/README.md).
 3. **Open Mantiza** and allow Bluetooth and notifications.
 4. **Device tab:**
    - Check that it says **Ready ✅**.
-   - Tap **Calibrate pointer**. It takes about 10 s; don't touch the screen.
+   - Under Pointer it should say **"Jumps straight to each point"**. With the old firmware, tap **Calibrate pointer** instead.
    - Tap **Start** under Eyes, and the device presses the share button.
 5. **Task tab:** type a request and tap **Go**.
 
@@ -50,7 +50,6 @@ sh scripts/build.sh
 
 ## Known gaps (next steps)
 - **Device screen status and approve/cancel buttons:** needs a firmware update. For now, approval is on the phone.
-- **The device's own "4 Share screen" menu item** still searches for "Mantiza Test" (the test app). Update the firmware to open "Mantiza".
 - **Scrolling direction** and **typing non-English text** aren't handled yet. Hindi comes later, by paste.
 - **The "Share Entire Screen" spot** is scaled from the 14 Plus. On other iPhones it should be measured once.
 - **Learned workflows**, the **widget** and **voice** are Phase 2.

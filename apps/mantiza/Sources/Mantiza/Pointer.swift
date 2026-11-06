@@ -21,7 +21,9 @@ final class Pointer: ObservableObject {
     @Published var calibration = "Not calibrated"
     @Published var calibrating = false
 
-    var calibrated: Bool { scaleX > 0 && scaleY > 0 }
+    /// The device's pointer jumps to exact points: no calibration needed.
+    var absolute: Bool { link?.absolute == true }
+    var calibrated: Bool { absolute || (scaleX > 0 && scaleY > 0) }
 
     /// Calibration spots in counts. Small, so that at the highest tracking speed no click hits the
     /// screen edge (where the pointer stops and the measurement would be wrong). The third checks
@@ -37,9 +39,16 @@ final class Pointer: ObservableObject {
 
     // MARK: - Tap
 
-    /// Device counts for a screen point, or nil if not calibrated.
+    /// What "tap x y" needs for a screen point: 0…32767 across the screen with the absolute
+    /// pointer, or counts from the corner (calibrated) with the old relative one.
     func counts(for point: CGPoint) -> (Int, Int)? {
-        guard calibrated else { return nil }
+        if absolute {
+            let s = UIScreen.main.bounds.size
+            let ax = Int((point.x / s.width * 32767).rounded())
+            let ay = Int((point.y / s.height * 32767).rounded())
+            return (min(max(ax, 0), 32767), min(max(ay, 0), 32767))
+        }
+        guard scaleX > 0, scaleY > 0 else { return nil }
         let cx = Int(((point.x - originX) / scaleX).rounded())
         let cy = Int(((point.y - originY) / scaleY).rounded())
         return (max(0, cx), max(0, cy))
