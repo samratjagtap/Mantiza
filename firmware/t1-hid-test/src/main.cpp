@@ -413,7 +413,18 @@ static void testShare() {
 }
 
 // Moves the pointer to a spot counted from the top-left corner.
-static void goTo(int x, int y) { cornerReset(); delay(100); mouseMove(x, y); }
+// Moves across first, then down, always in equal steps of GO_STEP counts: iOS speeds up
+// bigger and diagonal steps more, so only equal straight steps give a distance that is
+// the same for every step. The spot is rounded to a multiple of GO_STEP.
+static const int GO_STEP = 5;
+static void goTo(int x, int y) {
+  cornerReset();
+  delay(100);
+  x = (x + GO_STEP / 2) / GO_STEP * GO_STEP;
+  y = (y + GO_STEP / 2) / GO_STEP * GO_STEP;
+  mouseMove(x, 0, GO_STEP);
+  mouseMove(0, y, GO_STEP);
+}
 
 static const Test TESTS[] = {
   {"4 Share screen",   testShare},

@@ -33,7 +33,7 @@ final class ShareByDevice: ObservableObject {
     /// The three calibration spots, in counts. The third one checks the first two.
     /// Small on purpose: at the highest tracking speed bigger moves can hit the screen
     /// edge, where the pointer stops and the measurement would be wrong.
-    let spots: [CGPoint] = [CGPoint(x: 30, y: 60), CGPoint(x: 90, y: 180), CGPoint(x: 60, y: 120)]
+    let spots: [CGPoint] = [CGPoint(x: 20, y: 40), CGPoint(x: 50, y: 100), CGPoint(x: 35, y: 70)]
     private var taps: [CGPoint] = []
 
     init() {
@@ -74,7 +74,7 @@ final class ShareByDevice: ObservableObject {
             return
         }
         let screen = UIScreen.main.bounds.size
-        if let edge = taps.first(where: { $0.x >= screen.width - 3 || $0.y >= screen.height - 3 }) {
+        if let edge = taps.first(where: { $0.x >= screen.width - 15 || $0.y >= screen.height - 15 }) {
             calibration = String(format: "Failed: a click hit the screen edge (%.0f, %.0f). Lower the tracking speed a little and try again.", edge.x, edge.y)
             note(calibration)
             return
@@ -90,7 +90,8 @@ final class ShareByDevice: ObservableObject {
         for (k, v) in [("scaleX", scaleX), ("scaleY", scaleY), ("originX", originX), ("originY", originY)] {
             UserDefaults.standard.set(v, forKey: "t4d.\(k)")
         }
-        calibration = String(format: "1 count = %.2f × %.2f pt · check click off by %.0f pt", scaleX, scaleY, error)
+        let landed = taps.map { String(format: "%.0f,%.0f", $0.x, $0.y) }.joined(separator: " · ")
+        calibration = String(format: "1 count = %.2f × %.2f pt · check click off by %.0f pt\nClicks: ", scaleX, scaleY, error) + landed
         note(calibration)
     }
 
