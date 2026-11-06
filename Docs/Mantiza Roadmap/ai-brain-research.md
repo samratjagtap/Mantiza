@@ -20,11 +20,11 @@ Every Mantiza task is: **understand the request → per step: look → decide �
 - **Icon detectors** like Microsoft OmniParser: the icon detector is **AGPL** (inherited from YOLO), which is a problem for a closed app ([GitHub](https://github.com/microsoft/OmniParser)). Not chosen.
 
 ## 3. Jobs B and C: decision models (the "fast brain")
-A new category since September 2026: models that **write no text** and only answer typed questions (choice, yes/no, score) with probabilities. Four exist:
+A new category since September 2026: models that **write no text** and only answer typed questions (choice, yes/no, score) with probabilities. The four main ones are below. **Correction (2026-11-07):** OpenRouter lists **37** decision models, **25** of which take images (e.g. Perplexity Decider, Liquid d1, Inception Mercury Decide, Baseten Joey/Elephant/Mammoth, Morph Reflex). Jev 1.13/1.14 now take images too, and Jev 1.14 has a **box** question that returns where a target is on the image. First measurements: [brain bench](../../tools/brain-bench/README.md).
 
 | | **Jev** (TypeSafe) | **OpenAI Decisions API** | **Cloudflare Clef / Clef-flash** | **AWS Strands Decider 2B** |
 |---|---|---|---|---|
-| Sees images | ❌ text only | ✅ | ✅ Clef (27B); Clef-flash unclear | ❌ text only |
+| Sees images | ✅ since Jev 1.13 (was text only); 1.14 can also return a box | ✅ | ✅ Clef and Clef-flash | ❌ text only |
 | Speed (all vendor-reported) | median 0.27–0.31 s in an independent medical study; 0.5 s in Cloudflare's run | "~150 ms" (OpenAI claim, unreproduced) | Clef 209 ms, Clef-flash 39 ms (Cloudflare's own run) | ~115 ms on own hardware |
 | Price per M input tokens (output free) | $0.042 | $0.10 | $0.24 / $0.09 | self-host |
 | Status | GA, on OpenRouter | **GA since 2026-10-22** (beta from 2026-10-06; earlier news saying "limited preview" is out of date), open to any API account | GA on Workers AI; open weights (Apache 2.0) | open weights (Apache 2.0) |
@@ -95,4 +95,4 @@ Same ~20 real iPhone screens and goals for every candidate, called **from India*
 
 **Keys needed:** OpenAI, Google AI Studio, Anthropic, Cloudflare (account + API token), and Jev (TypeSafe, or through OpenRouter). Measure direct APIs for speed: routers like OpenRouter add a hop.
 
-**Plan (2026-11-07):** round 1 compares many models through **OpenRouter** (one key, easy to switch; same plain prompt for all, coordinates asked as JSON so every model is judged the same way). Round 2 re-times the winners with **direct** keys from India, and tests Claude's own computer-use tool (zoom) there, since it may not pass through OpenRouter.
+**Plan (2026-11-07):** round 1 compares many models through **OpenRouter** (one key, easy to switch; same plain prompt for all, coordinates asked as JSON so every model is judged the same way). Round 2 re-times the winners with **direct** keys from India, and tests Claude's own computer-use tool (zoom) there, since it may not pass through OpenRouter. Note: through OpenRouter, Claude Sonnet 5.5 and Gemini 3.8 Flash can't turn thinking fully off (lowest is `low`); Claude Haiku 5.5, GPT-6.1 Terra and GPT-6 Luna can (`none`).

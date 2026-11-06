@@ -1,0 +1,4 @@
+screens/*
+!screens/picker.jpg
+results/
+__pycache__/
