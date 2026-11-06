@@ -81,6 +81,8 @@ Request ──► E. Plan: big brain, little thinking (once, ~1–2 s)
 - **Fast brain (B, C):** OpenAI Decisions vs Cloudflare Clef vs Jev. Favourites are the two that see images.
 - **Big brain (D, E):** Gemini 3.8 Flash (phone mode, built-in confirmations, cheapest now) vs Claude Sonnet 5.5 (likely most accurate, zoom) vs GPT-6.1 Terra. All with thinking off for D.
 
+**Chosen (2026-11-07, to confirm in T8/T11):** fast brain = **OpenAI Decisions API** (`gpt-6-luna`), big brain = **Claude** (Sonnet 5.5, thinking off for job D). Keys: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` in `C:\Users\PC\.mantiza\keys.env` (outside the repo).
+
 ## 7. Speed: where the time actually goes
 Rough per-step budget with this setup: text recognition ~0.1 s + decision ~0.2–0.5 s (incl. network from India) + **device pointer move ~1 s**. Today our `goTo` pushes to the corner (40 reports) and then moves in 5-count steps at 15 ms per report, so a tap mid-screen takes about **1 s just to move**. Once the brain is fast, **the pointer becomes the slowest part**. Fixes to test: move from the current position instead of the corner, and bigger calibrated steps.
 
