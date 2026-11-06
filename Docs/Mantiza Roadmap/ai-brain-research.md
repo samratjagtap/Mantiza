@@ -94,3 +94,5 @@ Same ~20 real iPhone screens and goals for every candidate, called **from India*
 - for the fast brain, how often it hands over to the big brain.
 
 **Keys needed:** OpenAI, Google AI Studio, Anthropic, Cloudflare (account + API token), and Jev (TypeSafe, or through OpenRouter). Measure direct APIs for speed: routers like OpenRouter add a hop.
+
+**Plan (2026-11-07):** round 1 compares many models through **OpenRouter** (one key, easy to switch; same plain prompt for all, coordinates asked as JSON so every model is judged the same way). Round 2 re-times the winners with **direct** keys from India, and tests Claude's own computer-use tool (zoom) there, since it may not pass through OpenRouter.
