@@ -83,6 +83,11 @@ Request ──► E. Plan: big brain, little thinking (once, ~1–2 s)
 
 **Chosen (2026-11-07, to confirm in T8/T11):** fast brain = **OpenAI Decisions API** (`gpt-6-luna`), big brain = **Claude** (Sonnet 5.5, thinking off for job D). Keys: `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` in `C:\Users\PC\.mantiza\keys.env` (outside the repo).
 
+**Round 1 measured (2026-11-07, [brain bench](../../tools/brain-bench/README.md#round-1-results-2026-11-07-openrouter-from-india)):**
+- **Fast brain:** OpenAI Luna Decisions. 0.43 s median through OpenRouter from India; never wrong when ≥ 50% sure (71 of 82 steps).
+- **Big brain:** Claude Haiku 5.5 with thinking off. 98% right, 1.8 s, $0.0002 per call. Gemini 3.5 Flash-Lite is the fast backup at 1.2 s.
+- Larger models were barely more accurate and slower.
+
 ## 7. Speed: where the time actually goes
 Rough per-step budget with this setup: text recognition ~0.1 s + decision ~0.2–0.5 s (incl. network from India) + **device pointer move ~1 s**. Today our `goTo` pushes to the corner (40 reports) and then moves in 5-count steps at 15 ms per report, so a tap mid-screen takes about **1 s just to move**. Once the brain is fast, **the pointer becomes the slowest part**. Fixes to test: move from the current position instead of the corner, and bigger calibrated steps.
 

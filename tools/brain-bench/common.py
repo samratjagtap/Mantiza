@@ -14,8 +14,16 @@ from PIL import Image
 KEYS_FILE = Path.home() / ".mantiza" / "keys.env"
 OPENROUTER = "https://openrouter.ai"
 HEADERS_EXTRA = {"X-OpenRouter-Title": "Mantiza brain bench"}
-# One kept-alive connection, like the real app would have (a new connection per call adds a TLS handshake).
-SESSION = requests.Session()
+# One kept-alive connection per thread, like the real app would have (a new connection per call adds a
+# TLS handshake). Thread-local because the bench runs one thread per model.
+import threading
+_local = threading.local()
+
+
+def session() -> requests.Session:
+    if not hasattr(_local, "s"):
+        _local.s = requests.Session()
+    return _local.s
 
 
 def load_key(name: str) -> str:
@@ -54,7 +62,7 @@ def data_url(jpeg: bytes) -> str:
 def post(path: str, body: dict, timeout: float = 120) -> tuple[dict, float]:
     """POST to OpenRouter; returns (json, seconds). Raises with the server's message on error."""
     t0 = time.perf_counter()
-    r = SESSION.post(OPENROUTER + path, headers=headers(), json=body, timeout=timeout)
+    r = session().post(OPENROUTER + path, headers=headers(), json=body, timeout=timeout)
     dt = time.perf_counter() - t0
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:500]}")
@@ -62,7 +70,7 @@ def post(path: str, body: dict, timeout: float = 120) -> tuple[dict, float]:
 
 
 def get(path: str) -> dict:
-    r = SESSION.get(OPENROUTER + path, headers=headers(), timeout=30)
+    r = session().get(OPENROUTER + path, headers=headers(), timeout=30)
     if r.status_code != 200:
         raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
     return r.json()
