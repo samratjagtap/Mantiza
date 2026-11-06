@@ -7,6 +7,7 @@ A small iPhone app for the Phase 0 tests in the [plan](../../Docs/Mantiza%20Road
 | **T2** command channel to the device while it is the iPhone's mouse | In this app ([how to test](../../firmware/t1-hid-test/README.md#t2-commands-from-the-iphone-app)) |
 | **T3** screen capture keeps running while other apps are in front | In this app, tab **T3/T4 Screen** (below) |
 | **T4** does the picker ask every time, or can a session be reused? | Same tab |
+| **T9** battery: device standby, phone drain with screen capture | Tab **T9 Battery** (below) |
 
 ## T3 / T4: screen capture (iOS 27 ScreenCaptureKit)
 How it works on iPhone (from the iOS 27.1 SDK headers): the app shows Apple's **picker** (`SCContentSharingPicker`), you choose to share the screen, the app gets a filter and starts an `SCStream`. iOS has no screenshot API and no frame-rate setting: frames simply arrive when the screen changes. The `screen-capture` background mode is in [Info.plist](Info.plist).
@@ -40,6 +41,24 @@ Date: 2026-11-05 · iPhone 14 Plus · iOS 27
 
 ### T4d: how the device finds the button
 The device can't see the screen, so the app calibrates the pointer: the device clicks 3 known spots on a full-screen view and the app measures where they land. Result on iPhone 14 Plus at the highest tracking speed: **1 count = 4.37 pt on both axes, check click 0 pt off**. This only works because the device moves **across first, then down, in equal 5-count steps** (`goTo` in the firmware): diagonal or mixed-size steps get different acceleration from iOS and the distance becomes unpredictable (first try: 2.99 × 4.78 pt, check click 85 pt off). The share button is at about (214, 538) pt on the 14 Plus (from a screenshot; screenshot pixels ÷ 1.73 here).
+
+## T9: battery
+The StickS3 menu item **"9 Battery test"** turns its screen off (like the real device most of the time) and sends `batt <percent> <millivolts> <minutes> <charging>` to the app every minute. The app's **T9 Battery** tab saves each report together with the phone's battery level and whether screen capture is running, and shows the drain per hour.
+
+| # | Run | How | Look for |
+|---|---|---|---|
+| T9a | **Device standby**: connected, idle, screen off | StickS3 unplugged from USB, "9 Battery test" on. Phone off the charger, app in the background, **no** screen capture. Several hours (overnight is best) | Device %/h and hours left |
+| T9b | **Phone with screen capture running** | Same, but screen capture on (T3/T4 tab → Start) while you use the phone normally for 1–2 hours | Phone %/h with capture on |
+| T9c | **Phone without capture** (baseline) | Same normal use for 1–2 hours, capture off | Compare with T9b |
+
+Notes: the tab warns if anything was charging during a run (that run doesn't count). Start each run with **Clear and start a new run**. A press on a StickS3 button only wakes its screen for 10 s; the next press works as usual.
+
+### T9 results
+| # | Run | Hours | Start → end | Drain | Notes |
+|---|---|---|---|---|---|
+| T9a | Device standby | | | | |
+| T9b | Phone, capture on | | | | |
+| T9c | Phone, capture off | | | | |
 
 ## Build and install (Windows)
 Needs the [Windows xtool setup](../../Docs/Setup/windows-xtool-setup.md) and the iPhone bridge running. Then, in Ubuntu:

@@ -35,6 +35,8 @@ final class DeviceLink: NSObject, ObservableObject {
 
     /// T4d: called when the device sends "share".
     var onShare: (() -> Void)?
+    /// T9: called for every "batt …" message from the device.
+    var onBattery: (([Substring]) -> Void)?
 
     private var central: CBCentralManager!
     private var device: CBPeripheral?
@@ -181,6 +183,8 @@ final class DeviceLink: NSObject, ObservableObject {
             asksAnswered += 1
             if inBackground { asksInBackground += 1 }
             note("ask \(number) answered\(inBackground ? " in the BACKGROUND" : "")")
+        case "batt":
+            onBattery?(parts)
         case "share":
             note("device: share")
             onShare?()

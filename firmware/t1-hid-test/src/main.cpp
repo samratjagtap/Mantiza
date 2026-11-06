@@ -426,7 +426,37 @@ static void goTo(int x, int y) {
   mouseMove(0, y, GO_STEP);
 }
 
+// T9: battery. The screen goes off (like the real device most of the time) and the
+// device sends "batt <percent> <millivolts> <minutes> <charging>" to the app every minute.
+// Any button turns the screen on for 10 s; the first press only wakes it.
+static bool     battTest = false;
+static uint32_t battStartAt = 0, lastBattAt = 0, screenOnUntil = 0;
+static int      battStartPct = 0;
+static const uint32_t BATT_EVERY_MS = 60000, SCREEN_ON_MS = 10000;
+
+static void sendBatt() {
+  int pct = M5.Power.getBatteryLevel();
+  int mv  = M5.Power.getBatteryVoltage();
+  bool charging = M5.Power.isCharging() == m5::Power_Class::is_charging;
+  uint32_t minutes = (millis() - battStartAt) / 60000;
+  sendEvent("batt " + String(pct) + " " + String(mv) + " " + String(minutes) + " " + String(charging ? 1 : 0));
+  Serial.printf("[t9] %u min: %d%% %d mV%s\n", minutes, pct, mv, charging ? " CHARGING" : "");
+}
+static void testBattery() {
+  battTest = !battTest;
+  if (battTest) {
+    battStartAt = lastBattAt = millis();
+    battStartPct = M5.Power.getBatteryLevel();
+    screenOnUntil = millis() + SCREEN_ON_MS;
+    sendBatt();
+  } else {
+    M5.Display.setBrightness(80);
+  }
+  Serial.printf("[t9] battery test %s\n", battTest ? "ON" : "OFF");
+}
+
 static const Test TESTS[] = {
+  {"9 Battery test",   testBattery},
   {"4 Share screen",   testShare},
   {"2 Ask app once",   testAsk},
   {"2 Auto ask 5s",    testAutoAsk},
@@ -490,9 +520,11 @@ static void drawScreen() {
   }
 
   // T2 counters: A = asks answered / sent, last answer time; B = app heartbeats
-  d.setTextColor(autoAsk ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
+  // T9 instead while the battery test runs: start % -> now %, minutes
+  d.setTextColor(autoAsk || battTest ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
   d.setCursor(4, 200);
-  d.printf("A%u/%u %ums B%u", askAnswered, askSent, lastAskMs, beatsReceived);
+  if (battTest) d.printf("T9 %d%%>%d%% %umin", battStartPct, (int)M5.Power.getBatteryLevel(), (millis() - battStartAt) / 60000);
+  else d.printf("A%u/%u %ums B%u", askAnswered, askSent, lastAskMs, beatsReceived);
   d.setTextColor(TFT_YELLOW, TFT_BLACK);
   d.setCursor(4, 212);
   d.print(lastAction.substring(0, 21));
@@ -657,11 +689,32 @@ void loop() {
     redraw = true;
   }
 
-  if (M5.BtnB.wasPressed()) {          // KEY2 (side): next test
+  bool keyNext = M5.BtnB.wasPressed();  // KEY2 (side): next test
+  bool keyRun  = M5.BtnA.wasPressed();  // KEY1 (front): run test
+
+  if (battTest) {                      // T9: report every minute, screen off when idle
+    if (millis() - lastBattAt >= BATT_EVERY_MS) {
+      lastBattAt = millis();
+      sendBatt();
+      redraw = true;
+    }
+    static bool screenOn = true;
+    bool wake = keyNext || keyRun;
+    if (wake && !screenOn) keyNext = keyRun = false;  // first press only wakes the screen
+    if (wake) screenOnUntil = millis() + SCREEN_ON_MS;
+    bool shouldBeOn = millis() < screenOnUntil;
+    if (shouldBeOn != screenOn) {
+      screenOn = shouldBeOn;
+      M5.Display.setBrightness(screenOn ? 80 : 0);
+      redraw = true;
+    }
+  }
+
+  if (keyNext) {
     selectedTest = (selectedTest + 1) % TEST_COUNT;
     redraw = true;
   }
-  if (M5.BtnA.wasPressed()) {          // KEY1 (front): run test
+  if (keyRun) {
     runTest(selectedTest);
     redraw = true;
   }
