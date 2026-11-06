@@ -34,7 +34,12 @@ Date: 2026-11-05 · iPhone 14 Plus · iOS 27
 | T4c | After app relaunch | not recorded | Expected to ask, since T4b already asks |
 | – | Recording indicator | Shown | Red indicator while capturing |
 
-**What this means for Mantiza:** start capture once and keep it running between tasks; don't start one per task. The user then sees the picker about once per phone unlock, not once per task. When the phone locks, the app should notice the stop and ask again at the next task.
+| T4d | **Device presses the share button** (no touch on the phone) | ✅ | 2026-11-06. From the app ("Try now") ✅, and from the Home Screen with StickS3 "4 Share screen" ✅: the device opens the app through Search, the app shows the picker, the device clicks "Share Entire Screen". StickS3 showed "shared ok 4.1s" (picker → capturing, includes a 2 s wait before the click) |
+
+**What this means for Mantiza:** start capture once and keep it running between tasks. When it isn't running (after a lock, or the first task), **the device starts it by itself**: open the app, show the picker, click "Share Entire Screen". The user never has to touch the phone for screen sharing, as long as it is unlocked.
+
+### T4d: how the device finds the button
+The device can't see the screen, so the app calibrates the pointer: the device clicks 3 known spots on a full-screen view and the app measures where they land. Result on iPhone 14 Plus at the highest tracking speed: **1 count = 4.37 pt on both axes, check click 0 pt off**. This only works because the device moves **across first, then down, in equal 5-count steps** (`goTo` in the firmware): diagonal or mixed-size steps get different acceleration from iOS and the distance becomes unpredictable (first try: 2.99 × 4.78 pt, check click 85 pt off). The share button is at about (214, 538) pt on the 14 Plus (from a screenshot; screenshot pixels ÷ 1.73 here).
 
 ## Build and install (Windows)
 Needs the [Windows xtool setup](../../Docs/Setup/windows-xtool-setup.md) and the iPhone bridge running. Then, in Ubuntu:
