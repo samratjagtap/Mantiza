@@ -31,7 +31,9 @@ final class ShareByDevice: ObservableObject {
     @Published var successes = 0
 
     /// The three calibration spots, in counts. The third one checks the first two.
-    let spots: [CGPoint] = [CGPoint(x: 80, y: 160), CGPoint(x: 200, y: 400), CGPoint(x: 140, y: 280)]
+    /// Small on purpose: at the highest tracking speed bigger moves can hit the screen
+    /// edge, where the pointer stops and the measurement would be wrong.
+    let spots: [CGPoint] = [CGPoint(x: 30, y: 60), CGPoint(x: 90, y: 180), CGPoint(x: 60, y: 120)]
     private var taps: [CGPoint] = []
 
     init() {
@@ -68,6 +70,12 @@ final class ShareByDevice: ObservableObject {
         calibrating = false
         guard taps.count == spots.count else {
             calibration = "Failed: caught \(taps.count) of \(spots.count) clicks. Is the pointer on? Try again."
+            note(calibration)
+            return
+        }
+        let screen = UIScreen.main.bounds.size
+        if let edge = taps.first(where: { $0.x >= screen.width - 3 || $0.y >= screen.height - 3 }) {
+            calibration = String(format: "Failed: a click hit the screen edge (%.0f, %.0f). Lower the tracking speed a little and try again.", edge.x, edge.y)
             note(calibration)
             return
         }
