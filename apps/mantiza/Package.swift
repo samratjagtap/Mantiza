@@ -1,0 +1,18 @@
+// swift-tools-version: 6.0
+
+import PackageDescription
+
+let package = Package(
+    name: "Mantiza",
+    platforms: [
+        .iOS("27.0"),  // ScreenCaptureKit on iPhone needs iOS 27
+        .macOS(.v14),
+    ],
+    products: [
+        // An xtool project contains exactly one library product: the app.
+        .library(name: "Mantiza", targets: ["Mantiza"]),
+    ],
+    targets: [
+        .target(name: "Mantiza", swiftSettings: [.swiftLanguageMode(.v5)]),
+    ]
+)

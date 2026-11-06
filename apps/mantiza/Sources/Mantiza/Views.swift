@@ -1,0 +1,133 @@
+import SwiftUI
+
+// MARK: - Task
+
+struct TaskView: View {
+    @EnvironmentObject var agent: Agent
+    @EnvironmentObject var approvals: Approvals
+    @State private var request = ""
+    @FocusState private var typing: Bool
+
+    private let examples = ["Turn on the flashlight", "Open WhatsApp and message Azad: I'm coming",
+                            "Set an alarm for 7 AM", "Turn off Bluetooth"]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    TextField("What should Mantiza do?", text: $request, axis: .vertical)
+                        .lineLimit(1...4)
+                        .focused($typing)
+                    if agent.running {
+                        Button(role: .destructive) { agent.stop() } label: { Label("Stop", systemImage: "stop.fill") }
+                    } else {
+                        Button {
+                            typing = false
+                            agent.start(request)
+                        } label: { Label("Go", systemImage: "play.fill") }
+                        .disabled(request.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                } footer: {
+                    Text(agent.status)
+                }
+
+                if let q = approvals.question {
+                    Section("Needs your OK") {
+                        Text(q)
+                        HStack {
+                            Button("Approve") { approvals.answer(true) }.buttonStyle(.borderedProminent)
+                            Button("Don't", role: .destructive) { approvals.answer(false) }.buttonStyle(.bordered)
+                        }
+                    }
+                }
+
+                if agent.steps.isEmpty && !agent.running {
+                    Section("Try") {
+                        ForEach(examples, id: \.self) { e in
+                            Button(e) { request = e }
+                        }
+                    }
+                }
+
+                if !agent.steps.isEmpty {
+                    Section("Steps") {
+                        ForEach(agent.steps) { step in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(step.text).font(.callout)
+                                if let image = step.image {
+                                    Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 220)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Mantiza")
+        }
+    }
+}
+
+// MARK: - Device
+
+struct DeviceView: View {
+    @EnvironmentObject var link: DeviceLink
+    @EnvironmentObject var capture: ScreenCapture
+    @EnvironmentObject var pointer: Pointer
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent("Bluetooth", value: link.bluetooth)
+                    LabeledContent("Device", value: link.status)
+                    LabeledContent("Battery", value: link.battery)
+                    Button("Connect again") { link.connect() }
+                } header: { Text("1 · Device") } footer: {
+                    Text("The device must be paired in iPhone Settings → Bluetooth, with AssistiveTouch on (Accessibility → Touch → AssistiveTouch).")
+                }
+
+                Section {
+                    Text(pointer.calibration)
+                    Button("Calibrate pointer") { pointer.startCalibration() }.disabled(!link.ready || pointer.calibrating)
+                } header: { Text("2 · Pointer") } footer: {
+                    Text("The device clicks 3 spots and the app measures where they land (about 10 s). Do it again if you change the tracking speed.")
+                }
+
+                Section {
+                    LabeledContent("Screen sharing", value: capture.state)
+                    Button("Start (the device presses the button)") { Task { await pointer.startSharing() } }
+                        .disabled(!link.ready || !pointer.calibrated || capture.running)
+                    Button("Stop", role: .destructive) { capture.stop() }.disabled(!capture.running)
+                } header: { Text("3 · Eyes") } footer: {
+                    Text("Sharing stays on between tasks. Locking the phone turns it off; the next task turns it on again by itself.")
+                }
+
+                Section("Brains") {
+                    LabeledContent("Fast brain (Luna Decisions)", value: Keys.fastBrainRoute)
+                    LabeledContent("Big brain (Gemini 3.5 Flash-Lite)", value: Keys.gemini.isEmpty ? "missing key" : "Google AI Studio")
+                }
+            }
+            .navigationTitle("Device")
+            .fullScreenCover(isPresented: $pointer.calibrating) { CalibrationCatcher() }
+        }
+    }
+}
+
+// MARK: - Log
+
+struct LogView: View {
+    @EnvironmentObject var link: DeviceLink
+
+    var body: some View {
+        NavigationStack {
+            List(link.log) { line in
+                VStack(alignment: .leading) {
+                    Text(line.time, format: .dateTime.hour().minute().second()).font(.caption2).foregroundStyle(.secondary)
+                    Text(line.text).font(.caption.monospaced())
+                }
+            }
+            .navigationTitle("Log")
+        }
+    }
+}

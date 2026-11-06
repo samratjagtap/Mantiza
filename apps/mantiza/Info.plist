@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Mantiza</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Mantiza talks to your Mantiza device over Bluetooth so it can tap and type for you.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Mantiza looks at the screen to see where to tap while it does a task for you.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+		<string>screen-capture</string>
+	</array>
+</dict>
+</plist>

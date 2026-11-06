@@ -1,0 +1,4 @@
+version: 1
+bundleID: com.samratjagtap.Mantiza
+product: Mantiza
+infoPath: Info.plist
