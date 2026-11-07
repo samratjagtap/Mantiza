@@ -34,8 +34,10 @@ final class DeviceLink: NSObject, ObservableObject {
     @Published var absolute: Bool?
     @Published var log: [LogLine] = []
 
-    /// Called when the device sends "share" (its own menu item 4 asks the app to start sharing).
+    /// Called when the device sends "share" (it asks the app to start sharing).
     var onShare: (() -> Void)?
+    /// Called when the device's front button is pressed during a task.
+    var onStop: (() -> Void)?
 
     private var central: CBCentralManager!
     private var device: CBPeripheral?
@@ -165,6 +167,9 @@ final class DeviceLink: NSObject, ObservableObject {
             note("device: \(text)")
         case "share":
             onShare?()
+        case "stop":
+            note("Stop pressed on the device")
+            onStop?()
         default:
             note("device: \(text)")
         }

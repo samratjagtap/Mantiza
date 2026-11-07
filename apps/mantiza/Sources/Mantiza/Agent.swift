@@ -22,7 +22,9 @@ final class Agent: ObservableObject {
     let approvals = Approvals()
 
     @Published var running = false
-    @Published var status = "Ready"
+    @Published var status = "Ready" {
+        didSet { showOnDevice(status) }
+    }
     @Published var steps: [Step] = []
 
     private let fast = FastBrain()
@@ -64,7 +66,11 @@ final class Agent: ObservableObject {
         running = true
         stopRequested = false
         steps = []
-        defer { running = false }
+        link.send("task on")
+        defer {
+            running = false
+            link.send("task off")
+        }
         let taskStart = Date()
 
         guard link.ready else { end("❌ Device not connected (Device tab)"); return }
@@ -264,6 +270,17 @@ final class Agent: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// The device's screen shows what Mantiza is doing (plain letters only: its font has no emoji).
+    private func showOnDevice(_ text: String) {
+        guard let link, link.ready else { return }
+        var t = text.replacingOccurrences(of: "✅", with: "Done:").replacingOccurrences(of: "❌", with: "Failed:")
+            .replacingOccurrences(of: "⏹", with: "Stopped:").replacingOccurrences(of: "…", with: "...")
+            .replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "“", with: "\"")
+            .replacingOccurrences(of: "”", with: "\"")
+        t = String(t.filter { $0.isASCII && !$0.isNewline }.prefix(120)).trimmingCharacters(in: .whitespaces)
+        link.send("status " + t)
+    }
 
     private func isRisky(_ label: String) -> Bool {
         let l = label.lowercased()

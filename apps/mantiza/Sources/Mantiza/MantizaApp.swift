@@ -29,6 +29,7 @@ struct MantizaApp: App {
                 agent.approvals.setUp()
                 // The device's menu item "4 Share screen" opens this app and sends "share".
                 link.onShare = { [weak pointer = pointer] in Task { _ = await pointer?.startSharing() } }
+                link.onStop = { [weak agent = agent] in agent?.stop() }
             }
         }
     }

@@ -6,14 +6,12 @@
 // 2026-10-27). ABSOLUTE_POINTER=0 builds the old relative mouse as a fallback.
 //
 // StickS3 acts as a Bluetooth LE mouse + keyboard for an iPhone (AssistiveTouch pointer).
-// T1b adds key combinations (Command+Space, Return, Tab, arrows), an experimental
-// Fn/Globe key and mouse buttons 4..8.
-// T2 adds a private "command channel" service: the Mantiza test app writes the same
-// text commands as the serial port ("m 100 0", "t hello", "ping 3") and the device
-// answers with notifications ("pong 3", "ask 5", "ok ...").
+// The Mantiza app (apps/mantiza) writes text commands on a private "command channel" service
+// ("tap x y", "t hello", "k cmd+space", "status Opening WhatsApp") and the device answers with
+// notifications ("ok ...", "hi ...", "stop").
 //
-// Buttons:  KEY2 (side)  = select next test
-//           KEY1 (front) = run the selected test
+// Screen:   connection, battery and what Mantiza is doing (sent by the app).
+// Buttons:  front = Stop while a task runs; any button wakes the screen.
 // Serial:   USB at 115200 baud, type "help" for commands.
 
 #include <M5Unified.h>
@@ -27,7 +25,7 @@
 
 static const char* DEVICE_NAME = "Mantiza";
 
-// T2 command channel (must match the app, apps/phase0-test)
+// Command channel (must match the app, apps/mantiza/Sources/Mantiza/DeviceLink.swift)
 static const char* COMMAND_SERVICE_UUID = "f665cd1c-b15f-4ffa-b950-9d0f007b7db5";
 static const char* COMMAND_WRITE_UUID   = "2af74626-d331-4239-bd47-2ef715cab51e";  // app -> device
 static const char* COMMAND_EVENT_UUID   = "7a537076-9f59-4e6d-94eb-c90356cea6f3";  // device -> app (notify)
@@ -116,7 +114,7 @@ static NimBLECharacteristic* keyboardInput = nullptr;
 static NimBLECharacteristic* mouseInput    = nullptr;
 static volatile bool         connected     = false;
 
-// T2: commands written by the app arrive on the Bluetooth task; they are queued
+// Commands written by the app arrive on the Bluetooth task; they are queued
 // and run in loop() so mouse/keyboard timing stays on one task.
 struct AppCommand { char text[160]; };
 static QueueHandle_t         appQueue      = nullptr;
@@ -355,7 +353,7 @@ static void typeText(const char* text) {
 static void pasteCmdV()  { sendKey(MOD_LGUI, 0x19); }  // Command + V
 static void homeCmdH()   { sendKey(MOD_LGUI, 0x0B); }  // Command + H (experimental on iPhone)
 
-// HID key codes used by the T1b tests
+// HID key codes
 static const uint8_t KEY_ENTER = 0x28, KEY_ESC = 0x29, KEY_BACKSPACE = 0x2A, KEY_TAB = 0x2B,
                      KEY_SPACE = 0x2C, KEY_RIGHT = 0x4F, KEY_LEFT = 0x50, KEY_DOWN = 0x51, KEY_UP = 0x52;
 
@@ -398,70 +396,11 @@ static bool sendCombo(String combo, uint32_t holdMs = 0) {
 }
 
 // ---------------------------------------------------------------------------
-// Tests (selected with KEY2, run with KEY1)
+// Actions used by the app
 // ---------------------------------------------------------------------------
-static const char* TYPE_TEST_TEXT = "Hello Mantiza! ABC xyz 123 @#?";
-
-struct Test { const char* name; void (*run)(); };
-
-static void testCorner()  { cornerReset(); }
-#if ABSOLUTE_POINTER
-static void testSquare()  {  // corners of a square around the middle of the screen
-  const int a = 8000, b = 24000;
-  sendMouseAbs(0, a, a, 0); delay(400); sendMouseAbs(0, b, a, 0); delay(400);
-  sendMouseAbs(0, b, b, 0); delay(400); sendMouseAbs(0, a, b, 0); delay(400);
-}
-#else
-static void testSquare()  { mouseMove(200, 0); mouseMove(0, 200); mouseMove(-200, 0); mouseMove(0, -200); }
-#endif
-static void testClick()   { mouseClick(); }
-static void testLong()    { mouseLongPress(1000); }
-static void testScroll()  { for (int i = 0; i < 5; i++) mouseScroll(-1); }
-static void testType()    { typeText(TYPE_TEST_TEXT); }
-static void testPaste()   { pasteCmdV(); }
-static void testHome()    { homeCmdH(); }
-
-// T1b: open an app through Search without touching its icon.
-static void testSearch() {
-  sendCombo("cmd+space");
-  delay(700);                 // wait for Search to open
-  typeText("Notes");
-  delay(500);                 // wait for results
-  sendKey(0, KEY_ENTER);
-}
-static void testReturn()  { typeText("Mantiza T1b test"); sendKey(0, KEY_ENTER); }
-static void testTab()     { sendKey(0, KEY_TAB); }
-static void testFnH()     { sendCombo("fn+h"); }
-static void testFnC()     { sendCombo("fn+c"); }
-static void testFnN()     { sendCombo("fn+n"); }
-static void testFnUp()    { sendCombo("fn+up"); }
-static void testButton4() { mouseButtonClick(4); }
-static void testButton5() { mouseButtonClick(5); }
-
-// T2: the device asks the app ("ask N") and counts the app's answers ("ack N").
-// This shows whether the app answers while it is in the background.
-static uint32_t askSent = 0, askAnswered = 0, askSentAt = 0, lastAskMs = 0;
-static uint32_t beatsReceived = 0, lastBeatAt = 0;
-static bool     autoAsk = false;
-static const uint32_t AUTO_ASK_EVERY_MS = 5000;
-
-static void sendAsk() {
-  askSent++;
-  askSentAt = millis();
-  sendEvent("ask " + String(askSent));
-}
-static void resetT2Counts() { askSent = askAnswered = lastAskMs = beatsReceived = 0; }
-static void testAsk()     { sendAsk(); }
-static void testAutoAsk() {
-  autoAsk = !autoAsk;
-  resetT2Counts();
-  Serial.printf("[t2] auto ask %s\n", autoAsk ? "ON" : "OFF");
-}
-
-// T4d: the device starts screen sharing with no touch on the phone. It opens the
-// test app through Search and tells it to share; the app shows the picker and has
-// the device click the picker's share button ("tap x y").
-static void testShare() {
+// Opens the Mantiza app through Search and asks it to start screen sharing (the app shows
+// Apple's picker and has the device press "Share Entire Screen").
+static void openAppAndShare() {
   sendCombo("cmd+space");
   delay(800);                 // wait for Search to open
   typeText("Mantiza");
@@ -471,22 +410,22 @@ static void testShare() {
   sendEvent("share");
 }
 
-// Moves the pointer to a spot counted from the top-left corner.
-// Moves across first, then down, always in equal steps of GO_STEP counts: iOS speeds up
-// bigger and diagonal steps more, so only equal straight steps give a distance that is
-// the same for every step. The spot is rounded to a multiple of GO_STEP.
+// Moves the pointer to a spot. Absolute build: x, y in 0..32767, one report.
+// Relative build (fallback): counted from the top-left corner, across then down in equal steps
+// of GO_STEP counts (iOS speeds up bigger and diagonal steps, so only equal straight steps
+// give a predictable distance).
 static const int GO_STEP = 5;
 static void goTo(int x, int y) {
 #if ABSOLUTE_POINTER
-  sendMouseAbs(mouseButtons, x, y, 0);  // x, y in 0..32767: one report, no steps
-  return;
-#endif
+  sendMouseAbs(mouseButtons, x, y, 0);
+#else
   cornerReset();
   delay(100);
   x = (x + GO_STEP / 2) / GO_STEP * GO_STEP;
   y = (y + GO_STEP / 2) / GO_STEP * GO_STEP;
   mouseMove(x, 0, GO_STEP);
   mouseMove(0, y, GO_STEP);
+#endif
 }
 
 // Drag (like a finger swipe): press at x1,y1, slide to x2,y2, let go. Absolute units (0..32767).
@@ -504,123 +443,61 @@ static void dragTo(int x1, int y1, int x2, int y2, int steps = 14) {
 #endif
 }
 
-// T9: battery. The screen goes off (like the real device most of the time) and the
-// device sends "batt <percent> <millivolts> <minutes> <charging>" to the app every minute.
-// Any button turns the screen on for 10 s; the first press only wakes it.
-static bool     battTest = false;
-static uint32_t battStartAt = 0, lastBattAt = 0, screenOnUntil = 0;
-static int      battStartPct = 0;
-static const uint32_t BATT_EVERY_MS = 60000, SCREEN_ON_MS = 10000;
-
-static void sendBatt() {
-  int pct = M5.Power.getBatteryLevel();
-  int mv  = M5.Power.getBatteryVoltage();
-  bool charging = M5.Power.isCharging() == m5::Power_Class::is_charging;
-  uint32_t minutes = (millis() - battStartAt) / 60000;
-  sendEvent("batt " + String(pct) + " " + String(mv) + " " + String(minutes) + " " + String(charging ? 1 : 0));
-  Serial.printf("[t9] %u min: %d%% %d mV%s\n", minutes, pct, mv, charging ? " CHARGING" : "");
-}
-static void testBattery() {
-  battTest = !battTest;
-  if (battTest) {
-    battStartAt = lastBattAt = millis();
-    battStartPct = M5.Power.getBatteryLevel();
-    screenOnUntil = millis() + SCREEN_ON_MS;
-    sendBatt();
-  } else {
-    M5.Display.setBrightness(80);
-  }
-  Serial.printf("[t9] battery test %s\n", battTest ? "ON" : "OFF");
-}
-
-static const Test TESTS[] = {
-  {"9 Battery test",   testBattery},
-  {"4 Share screen",   testShare},
-  {"2 Ask app once",   testAsk},
-  {"2 Auto ask 5s",    testAutoAsk},
-  {"b Search Notes",   testSearch},
-  {"b Type+Return",    testReturn},
-  {"b Tab (FKA)",      testTab},
-  {"b Fn+H Home",      testFnH},
-  {"b Fn+C Control",   testFnC},
-  {"b Fn+N Notific.",  testFnN},
-  {"b Fn+Up Switcher", testFnUp},
-  {"b Button 4",       testButton4},
-  {"b Button 5",       testButton5},
-  {"Corner reset", testCorner},
-  {"Square 200",   testSquare},
-  {"Click",        testClick},
-  {"Long press",   testLong},
-  {"Scroll",       testScroll},
-  {"Type text",    testType},
-  {"Paste Cmd+V",  testPaste},
-  {"Home Cmd+H?",  testHome},
-};
-static const int TEST_COUNT = sizeof(TESTS) / sizeof(TESTS[0]);
-static int selectedTest = 0;
-static String lastAction = "-";
-
 // ---------------------------------------------------------------------------
-// Screen (135 x 240, portrait)
+// Screen (135 x 240, portrait): connection, battery, and what Mantiza is doing.
+// The app sends "status <text>" at every step. The screen turns off after a minute without
+// news and wakes on a button or a new status.
 // ---------------------------------------------------------------------------
+static String statusText = "Ready";
+static bool   taskRunning = false;   // the app said a task is running: front button = Stop
+static uint32_t screenOnUntil = 0;
+static bool   screenOn = true;
+static const uint32_t SCREEN_ON_MS = 60000;
+
+static void wakeScreen() { screenOnUntil = millis() + SCREEN_ON_MS; }
+
 static void drawScreen() {
   auto& d = M5.Display;
   d.startWrite();
   d.fillScreen(TFT_BLACK);
-  d.setTextSize(1);
 
+  d.setTextSize(2);
   d.setTextColor(TFT_CYAN, TFT_BLACK);
-  d.setCursor(4, 4);
-  d.print("Mantiza T2");
-  d.setCursor(78, 4);
-  d.setTextColor(appLinked ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
-  d.print(appLinked ? "App:on" : "App:--");
-
-  d.setCursor(4, 18);
-  d.setTextColor(connected ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
-  d.print(connected ? "Connected" : "Waiting...");
+  d.setCursor(4, 6);
+  d.print("Mantiza");
+  d.setTextSize(1);
   d.setTextColor(TFT_WHITE, TFT_BLACK);
-  d.setCursor(90, 18);
+  d.setCursor(104, 12);
   d.printf("%d%%", (int)M5.Power.getBatteryLevel());
 
-  // The list is longer than the screen: show a window that follows the selection.
-  static const int VISIBLE = 9;
-  static int top = 0;
-  if (selectedTest < top) top = selectedTest;
-  if (selectedTest >= top + VISIBLE) top = selectedTest - VISIBLE + 1;
-  for (int i = top; i < TEST_COUNT && i < top + VISIBLE; i++) {
-    int y = 38 + (i - top) * 17;
-    bool sel = (i == selectedTest);
-    if (sel) d.fillRect(0, y - 3, 135, 16, TFT_DARKGREY);
-    d.setTextColor(TFT_WHITE, sel ? TFT_DARKGREY : TFT_BLACK);
+  d.setCursor(4, 34);
+  d.setTextColor(connected ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
+  d.print(connected ? "iPhone: connected" : "iPhone: waiting...");
+  d.setCursor(4, 48);
+  d.setTextColor(appLinked ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
+  d.print(appLinked ? "App: ready" : "App: not open");
+
+  // What Mantiza is doing, wrapped at 21 characters, up to 8 lines
+  d.setTextColor(TFT_WHITE, TFT_BLACK);
+  int y = 74;
+  String rest = statusText;
+  while (rest.length() > 0 && y < 200) {
+    int cut = rest.length() <= 21 ? rest.length() : rest.lastIndexOf(' ', 21);
+    if (cut <= 0) cut = min((int)rest.length(), 21);
     d.setCursor(4, y);
-    d.printf("%s %s", sel ? ">" : " ", TESTS[i].name);
+    d.print(rest.substring(0, cut));
+    rest = rest.substring(cut);
+    rest.trim();
+    y += 15;
   }
 
-  // T2 counters: A = asks answered / sent, last answer time; B = app heartbeats
-  // T9 instead while the battery test runs: start % -> now %, minutes
-  d.setTextColor(autoAsk || battTest ? TFT_GREEN : TFT_YELLOW, TFT_BLACK);
-  d.setCursor(4, 200);
-  if (battTest) d.printf("T9 %d%%>%d%% %umin", battStartPct, (int)M5.Power.getBatteryLevel(), (millis() - battStartAt) / 60000);
-  else d.printf("A%u/%u %ums B%u", askAnswered, askSent, lastAskMs, beatsReceived);
-  d.setTextColor(TFT_YELLOW, TFT_BLACK);
-  d.setCursor(4, 212);
-  d.print(lastAction.substring(0, 21));
-  d.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
-  d.setCursor(4, 226);
-  d.print("Side=next Front=run");
+  if (taskRunning) {
+    d.fillRect(0, 216, 135, 24, TFT_RED);
+    d.setTextColor(TFT_WHITE, TFT_RED);
+    d.setCursor(13, 224);
+    d.print("Front button: STOP");
+  }
   d.endWrite();
-}
-
-static void runTest(int index) {
-  if (!connected) {
-    lastAction = "Not connected";
-    return;
-  }
-  Serial.printf("[test] %s\n", TESTS[index].name);
-  uint32_t start = millis();
-  TESTS[index].run();
-  lastAction = String(TESTS[index].name) + " " + String(millis() - start) + "ms";
 }
 
 // ---------------------------------------------------------------------------
@@ -641,14 +518,15 @@ static void printHelp() {
     "  k <combo>          key combination, e.g. k cmd+space, k enter, k tab+h, k fn+c\n"
     "  K <ms> <combo>     same, but hold the keys for <ms> first\n"
     "  b <1-8>            click mouse button 1..8\n"
-    "  ask                T2: ask the app once (app answers \"ack N\")\n"
     "  go <x> <y>         pointer to x,y (absolute build: 0..32767 across the screen;\n"
     "                     relative build: counts from the top-left corner)\n"
     "  tap <x> <y>        same, then click\n"
     "  drag <x1> <y1> <x2> <y2>  press, slide, let go (absolute build; 0..32767)\n"
     "  share              open the Mantiza app and ask it to share the screen\n"
+    "  status <text>      show what Mantiza is doing (no reply)\n"
+    "  task on|off        a task is running: front button = Stop (no reply)\n"
     "  help               this list\n"
-    "From the app only: ping <n> (-> pong <n>), ack <n>, beat <n>, hello");
+    "From the app only: ping <n> (-> pong <n>), hello (-> hi ...)");
 }
 
 // Answers to the serial port, and also to the app if the command came from it.
@@ -667,36 +545,20 @@ static void handleCommand(String line, bool fromApp = false) {
   if (line.isEmpty()) return;
   if (fromApp) Serial.printf("[t2] <- app: %s\n", line.c_str());
 
-  // T2 words first ("ping" would otherwise be read as "p" = paste, "hello" as "h" = home).
+  // Words first ("ping" would otherwise be read as "p" = paste, "hello" as "h" = home).
   long num = line.indexOf(' ') > 0 ? line.substring(line.indexOf(' ') + 1).toInt() : 0;
   if (wordIs(line, "ping"))  { sendEvent("pong " + String(num)); return; }
+  // "status" and "task" get no reply: the app sends them without waiting, and an extra reply
+  // would be taken as the answer to the next command.
+  if (wordIs(line, "status")) { statusText = line.length() > 7 ? line.substring(7) : ""; wakeScreen(); return; }
+  if (wordIs(line, "task"))   { taskRunning = line.endsWith("on"); wakeScreen(); return; }
   if (wordIs(line, "hello")) { sendEvent("hi " + String(DEVICE_NAME) + " battery " + String((int)M5.Power.getBatteryLevel()) + "% abs " + String(ABSOLUTE_POINTER)); return; }
-  if (wordIs(line, "ack")) {
-    askAnswered++;
-    if ((uint32_t)num == askSent) lastAskMs = millis() - askSentAt;
-    lastAction = "app ack " + String(num) + " " + String(lastAskMs) + "ms";
-    return;
-  }
-  if (wordIs(line, "beat")) {
-    beatsReceived++;
-    lastBeatAt = millis();
-    lastAction = "app beat " + String(num);
-    return;
-  }
-  if (wordIs(line, "ask")) { sendAsk(); reply("ok", fromApp); return; }
-  if (wordIs(line, "shared")) {        // T4d: the app reports the result of "share"
-    lastAction = line.substring(0, 21);
-    Serial.printf("[t4d] %s\n", line.c_str());
-    return;
-  }
-
-  int gx = 0, gy = 0;                  // T4d: go / tap at a spot from the top-left corner
+  int gx = 0, gy = 0;                  // go / tap at a spot
   bool isGo = wordIs(line, "go"), isTap = wordIs(line, "tap");
   if ((isGo || isTap) && !connected) { reply("not connected to the iPhone yet", fromApp); return; }
   if ((isGo || isTap) && sscanf(line.c_str() + (isGo ? 2 : 3), "%d %d", &gx, &gy) == 2) {
     goTo(gx, gy);
     if (isTap) { delay(ABSOLUTE_POINTER ? 40 : 150); mouseClick(); }
-    lastAction = line.substring(0, 21);
     reply("ok " + line, fromApp);
     return;
   }
@@ -708,11 +570,10 @@ static void handleCommand(String line, bool fromApp = false) {
       return;
     }
     dragTo(d1, d2, d3, d4);
-    lastAction = line.substring(0, 21);
     reply("ok " + line, fromApp);
     return;
   }
-  if (wordIs(line, "share")) { if (connected) testShare(); reply("ok share", fromApp); return; }
+  if (wordIs(line, "share")) { if (connected) openAppAndShare(); reply("ok share", fromApp); return; }
 
   if (!connected && line != "help") {
     reply("not connected to the iPhone yet", fromApp);
@@ -741,7 +602,6 @@ static void handleCommand(String line, bool fromApp = false) {
   else if (cmd == 'b' && sscanf(args.c_str(), "%d", &a) == 1 && a >= 1 && a <= 8) mouseButtonClick(a);
   else { reply("unknown command: " + line, fromApp); return; }
 
-  lastAction = (fromApp ? "app: " : "") + line.substring(0, fromApp ? 16 : 21);
   reply("ok " + line, fromApp);
 }
 
@@ -758,7 +618,8 @@ void setup() {
   appQueue = xQueueCreate(16, sizeof(AppCommand));
   setupBluetooth();
   drawScreen();
-  Serial.println("Mantiza T2 ready. Type: help");
+  wakeScreen();
+  Serial.println("Mantiza ready. Type: help");
 }
 
 void loop() {
@@ -768,46 +629,29 @@ void loop() {
   wasConnected = connected;
   wasLinked = appLinked;
 
-  AppCommand appCmd;                   // T2: commands from the app
+  AppCommand appCmd;                   // commands from the app
   while (xQueueReceive(appQueue, &appCmd, 0) == pdTRUE) {
     handleCommand(String(appCmd.text), true);
     redraw = true;
   }
 
-  static uint32_t lastAutoAsk = 0;     // T2: ask the app every 5 s
-  if (autoAsk && connected && millis() - lastAutoAsk >= AUTO_ASK_EVERY_MS) {
-    lastAutoAsk = millis();
-    sendAsk();
+  // Front button: Stop while a task runs (the app stops at once). Any button wakes the screen;
+  // a press on a dark screen only wakes it.
+  bool front = M5.BtnA.wasPressed();
+  bool side  = M5.BtnB.wasPressed();
+  if (front || side) {
+    bool wasDark = !screenOn;
+    wakeScreen();
+    if (front && !wasDark && taskRunning) {
+      sendEvent("stop");
+      statusText = "Stopping...";
+    }
     redraw = true;
   }
-
-  bool keyNext = M5.BtnB.wasPressed();  // KEY2 (side): next test
-  bool keyRun  = M5.BtnA.wasPressed();  // KEY1 (front): run test
-
-  if (battTest) {                      // T9: report every minute, screen off when idle
-    if (millis() - lastBattAt >= BATT_EVERY_MS) {
-      lastBattAt = millis();
-      sendBatt();
-      redraw = true;
-    }
-    static bool screenOn = true;
-    bool wake = keyNext || keyRun;
-    if (wake && !screenOn) keyNext = keyRun = false;  // first press only wakes the screen
-    if (wake) screenOnUntil = millis() + SCREEN_ON_MS;
-    bool shouldBeOn = millis() < screenOnUntil;
-    if (shouldBeOn != screenOn) {
-      screenOn = shouldBeOn;
-      M5.Display.setBrightness(screenOn ? 80 : 0);
-      redraw = true;
-    }
-  }
-
-  if (keyNext) {
-    selectedTest = (selectedTest + 1) % TEST_COUNT;
-    redraw = true;
-  }
-  if (keyRun) {
-    runTest(selectedTest);
+  bool shouldBeOn = millis() < screenOnUntil;
+  if (shouldBeOn != screenOn) {
+    screenOn = shouldBeOn;
+    M5.Display.setBrightness(screenOn ? 80 : 0);
     redraw = true;
   }
 

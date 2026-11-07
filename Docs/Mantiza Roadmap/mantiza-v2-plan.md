@@ -441,13 +441,13 @@ Facts from M5Stack's documentation [P15]:
 | Rule | How |
 |---|---|
 | **Never touch sensitive apps** | Block list: banking, UPI and payment apps, password managers and authenticators, Wallet, Health, government ID. If the screen shows one of these (detected by app opened + OCR), stop |
-| **Ask before anything that cannot be undone** | Sending messages, posting, buying, deleting: approval on phone **and** device screen |
+| **Ask only about money and destruction** | Paying, buying, ordering, transferring money, deleting and posting publicly need approval. **Never ask about what the user explicitly requested:** a dictated message or a requested call is the task itself _(decided 2026-11-07)_ |
 | **Payments stay with the user** | Mantiza never types card numbers, PINs or OTPs; the user completes payment |
 | **Always stoppable** | Stop in app, Dynamic Island, device button, or shake |
 | **Screen data** | Screenshots go to the cloud model only with clear consent (disclosed by name: Anthropic or Google); send downsized frames; never capture blocked apps; never store full video, only selected step images (deletable) |
 | **Clipboard** | Expiring, local-only items [P14] |
 | **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval. Jev does not treat state as hostile by default [P32], so it only ever picks from our list |
-| **Risky items hidden from the picker** | Send, Delete, Buy, Pay, Post are left out of Jev's list unless the subtask allows them, and the app refuses such taps without approval _(idea, pattern from arc-cua [P36])_ |
+| **Risky taps checked** | Delete, Buy, Pay, Post: the app asks before tapping them unless the request itself asked for exactly that _(pattern from arc-cua [P36])_ |
 | **No blind retries** | Never repeat an action after an uncertain failure (e.g. Send), so nothing is sent or ordered twice _(pattern from mobile-jev [P35])_ |
 | **Literal text only** | The picker never invents text; message text comes only from the user's request via the big brain. Missing input → ask the user |
 | **AI providers disclosed** | Consent screen names every company that receives data: Anthropic or Google (screenshots), TypeSafe (on-screen text list) [P33] |

@@ -185,7 +185,9 @@ final class BigBrain {
          "goal": one sentence: what must be true on the screen when the task is done,
          "text": the exact text to type, copied from the request (never invent or translate), or null,
          "success_text": a short piece of text that will be visible on screen when done, or null if unsure,
-         "needs_approval": true if the task sends, posts, buys, pays, deletes or calls anything, else false,
+         "needs_approval": true ONLY if the task pays, buys, orders, transfers money, deletes something or posts publicly.
+                False for sending a message or making a call the user asked for: sending it is the task itself.
+                Never ask about something the user explicitly requested,
          "max_steps": number of taps it should take at most, between 4 and 15,
          "state": if the task turns one of these on or off: \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null,
          "state_value": true if it must end up on, false if off; null if no state}
