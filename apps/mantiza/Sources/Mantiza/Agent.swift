@@ -86,12 +86,19 @@ final class Agent: ObservableObject {
             add("Screen sharing on (\(seconds(since: t)))")
         }
 
-        // 3. Open the app with the keyboard: Home, Search, name, Enter (no AI needed)
-        if let app = task.app {
+        // 3. Start from the Home Screen (never inside Mantiza itself), then open the app:
+        //    Control Centre with mouse button 4, any other app with Search (no AI needed).
+        status = "Going to the Home Screen…"
+        await link.run("h")
+        try? await Task.sleep(for: .milliseconds(700))
+        if let app = task.app, app.lowercased().replacingOccurrences(of: " ", with: "").hasPrefix("controlcent") {
+            status = "Opening Control Centre…"
+            await link.run("b 4")
+            try? await Task.sleep(for: .milliseconds(900))
+            add("Opened Control Centre (mouse button 4)")
+        } else if let app = task.app {
             status = "Opening \(app)…"
             t = Date()
-            await link.run("h")
-            try? await Task.sleep(for: .milliseconds(700))
             await link.run("k cmd+space")
             try? await Task.sleep(for: .milliseconds(700))
             await link.run("t \(ascii(app))")
@@ -143,9 +150,10 @@ final class Agent: ObservableObject {
             }
             let context = "iPhone screen with numbered pink boxes around the text. Goal: \(task.goal)\n"
                 + "Steps done so far: \(history.isEmpty ? "none" : history.joined(separator: "; "))"
-            let answers: [String: Choice]
+            var answers: [String: Choice] = [:]
             do { answers = try await fast.ask(context: context, image: marked, questions: questions) } catch {
-                end("❌ Fast brain failed: \(error.localizedDescription)"); return
+                // Not fatal: the big brain takes this step.
+                add("Step \(n): fast brain didn't answer (\(error.localizedDescription.prefix(80))); asking the big brain")
             }
             let action = answers["action"] ?? Choice(value: "icon", confidence: 0)
             let target = answers["target"]

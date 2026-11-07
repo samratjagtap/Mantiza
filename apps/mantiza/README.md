@@ -29,12 +29,13 @@ These choices come from the [brain bench](../../tools/brain-bench/README.md).
 ## First-time setup on the iPhone
 1. **Pair the device:** Settings → Bluetooth.
 2. **Turn on AssistiveTouch:** Settings → Accessibility → Touch → AssistiveTouch. Set **Tracking Speed** to the highest.
-3. **Open Mantiza** and allow Bluetooth and notifications.
-4. **Device tab:**
+3. **Give mouse button 4 the job "Control Centre"**, so Mantiza can open Control Centre (flashlight and other quick switches): Settings → Accessibility → Touch → AssistiveTouch → Devices → **Mantiza** → Customize Additional Buttons. Press button 4 from the device (Mantiza does this when you add it), or choose it in the list, then pick **Control Center**.
+4. **Open Mantiza** and allow Bluetooth and notifications.
+5. **Device tab:**
    - Check that it says **Ready ✅**.
    - Under Pointer it should say **"Jumps straight to each point"**. With the old firmware, tap **Calibrate pointer** instead.
    - Tap **Start** under Eyes, and the device presses the share button.
-5. **Task tab:** type a request and tap **Go**.
+6. **Task tab:** type a request and tap **Go**.
 
 ## Keys
 The keys are in `C:\Users\PC\.mantiza\keys.env`, outside the repo. `scripts/make_secrets.py` copies them into `Sources/Mantiza/Secrets.swift`, which is in `.gitignore`.

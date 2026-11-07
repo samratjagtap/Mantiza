@@ -62,7 +62,18 @@ final class FastBrain {
     /// Asks all questions about one screenshot in one call.
     func ask(context: String, image: Data, questions: [Question]) async throws -> [String: Choice] {
         if !Keys.openAI.isEmpty { return try await askOpenAI(context: context, image: image, questions: questions) }
-        if !Keys.openRouter.isEmpty { return try await askOpenRouter(context: context, image: image, questions: questions) }
+        if !Keys.openRouter.isEmpty {
+            do {
+                return try await askOpenRouter(context: context, image: image, questions: questions)
+            } catch BrainError.http(let code, let body) where code == 502 && body.contains("refused to answer question") {
+                // OpenRouter fails the whole call when the model declines one question
+                // ("OpenAI refused to answer question \"target\""). Ask again without that one.
+                let refused = questions.filter { body.contains("\\\"\($0.name)\\\"") || body.contains("\"\($0.name)\"") }
+                let rest = questions.filter { q in !refused.contains { $0.name == q.name } }
+                guard !refused.isEmpty, !rest.isEmpty else { throw BrainError.http(code, body) }
+                return try await askOpenRouter(context: context, image: image, questions: rest)
+            }
+        }
         throw BrainError.noKey("OpenAI or OpenRouter")
     }
 
@@ -166,7 +177,9 @@ final class BigBrain {
         User request: "\(request)"
 
         Reply with only a JSON object:
-        {"app": name of the iPhone app to open exactly as on the Home Screen (e.g. "WhatsApp", "Settings", "Clock"), or null,
+        {"app": name of the iPhone app to open exactly as on the Home Screen (e.g. "WhatsApp", "Settings", "Clock"),
+                or "Control Center" for quick switches that live there (flashlight, rotation lock, screen mirroring,
+                calculator shortcut, timer shortcut, camera shortcut), or null,
          "goal": one sentence: what must be true on the screen when the task is done,
          "text": the exact text to type, copied from the request (never invent or translate), or null,
          "success_text": a short piece of text that will be visible on screen when done, or null if unsure,
