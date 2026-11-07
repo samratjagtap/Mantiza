@@ -119,6 +119,7 @@ final class Agent: ObservableObject {
 
         // 4. Look → decide → act
         var typed = false
+        var typeTries = 0
         var history: [String] = []
         var lastPoint: CGPoint?
         var lastLabel = ""
@@ -156,13 +157,14 @@ final class Agent: ObservableObject {
                 ("icon", "tap something with no number: a switch (toggle), a send arrow, back arrow, plus or a picture. To turn a setting on or off, choose this: the switch must be tapped, not its label"),
             ]
             if let text = task.text, !typed {
-                actions.append(("type", "type the text \"\(text)\" (only if a text field is selected, the keyboard is showing and the text is not there yet)"))
+                actions.append(("type", "tap the text field (e.g. the message box) and type \"\(text)\" into it. Choose this as soon as the right text field is on screen (e.g. the right chat is open). There is no on-screen keyboard: a Bluetooth keyboard is connected, so iOS hides it"))
             }
             actions.append(("scroll", "scroll down to find what is needed"))
             actions.append(("done", "the goal is already reached on this screen"))
             var questions = [
                 FastBrain.Question(name: "action", instructions: "What should be done next to reach the goal?", options: actions),
-                FastBrain.Question(name: "reached", instructions: "Look at the screen: is the goal already reached? Goal: \(task.goal)",
+                FastBrain.Question(name: "reached", instructions: "Look at the screen: is the goal already reached? Goal: \(task.goal)"
+                                   + " (a message counts as sent only when it shows as a sent bubble in the chat, not while it is still in the text field)",
                                    options: [("yes", "yes, the screen shows the goal is reached"), ("no", "no, not yet")]),
             ]
             if !items.isEmpty {
@@ -182,7 +184,8 @@ final class Agent: ObservableObject {
             let decideTime = seconds(since: t)
             let shot = UIImage(data: marked)
 
-            if let reached = answers["reached"], reached.value == "yes", reached.confidence >= 0.7, !history.isEmpty {
+            let textPending = task.text != nil && !typed  // never "done" before the text is typed
+            if let reached = answers["reached"], reached.value == "yes", reached.confidence >= 0.7, !history.isEmpty, !textPending {
                 add("Step \(n): goal reached (\(String(format: "%.0f%%", reached.confidence * 100)) sure)", image: shot)
                 end("✅ Done in " + seconds(since: taskStart))
                 return
@@ -192,17 +195,43 @@ final class Agent: ObservableObject {
             var point: CGPoint?  // in frame pixels
             var label = ""
             switch action.value {
-            case "done" where action.confidence >= 0.6:
+            case "done" where action.confidence >= 0.6 && !textPending:
                 let check = task.success_text.flatMap { s in items.contains { $0.text.localizedCaseInsensitiveContains(s) } ? "✓ \"\(s)\" on screen" : nil }
                 add("Step \(n): done (\(String(format: "%.0f%%", action.confidence * 100)) sure\(check.map { ", " + $0 } ?? ""))", image: shot)
                 end("✅ Done in " + seconds(since: taskStart))
                 return
-            case "type" where action.confidence >= sure:
+            case "type" where action.confidence >= 0.4:
                 guard let text = task.text else { break }
+                // 1. Tap into the text field (the big brain finds it: it often has no text, or only a
+                //    grey placeholder like "Message"). 2. Type. 3. Check the text shows on screen.
+                status = "Step \(n): finding the text box…"
+                t = Date()
+                let field: TapPoint
+                do {
+                    field = try await big.locate(image: plain,
+                                                 goal: "Tap inside the text field where \"\(text)\" must be typed (for a chat: the message box at the bottom)",
+                                                 history: [])
+                } catch { end("❌ Big brain failed: \(error.localizedDescription)"); return }
+                let fieldPoint = toScreen(CGPoint(x: field.x * Double(frame.width), y: field.y * Double(frame.height)), frame: frame)
+                guard await pointer.tap(fieldPoint) else { end("❌ The device didn't tap"); return }
+                try? await Task.sleep(for: .milliseconds(500))
+                status = "Step \(n): typing \"\(text)\""
                 await type(text)
-                typed = true
-                history.append("typed the text")
-                add("Step \(n): typed \"\(text)\" · read \(readTime), decide \(decideTime)", image: shot)
+                await capture.waitForSettle()
+                let shown = await textShows(text)
+                typeTries += 1
+                if shown {
+                    typed = true
+                    history.append("tapped the text field and typed \"\(text)\" (it shows in the field; not sent yet)")
+                    add("Step \(n): typed \"\(text)\" into \"\(field.what)\" (\(seconds(since: t)))", image: shot)
+                } else if typeTries >= 2 {
+                    end("❌ Typed twice, but the text doesn't show on screen"); return
+                } else {
+                    history.append("tapped \"\(field.what)\" and typed, but the text did not appear")
+                    add("Step \(n): typed into \"\(field.what)\", but the text doesn't show; trying again", image: shot)
+                }
+                lastLabel = ""
+                lastScreen = ""
                 continue
             case "scroll" where action.confidence >= sure:
                 await link.run("w -4")
@@ -297,6 +326,16 @@ final class Agent: ObservableObject {
     private func ascii(_ text: String) -> String {
         text.replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "“", with: "\"")
             .replacingOccurrences(of: "”", with: "\"").filter { $0.isASCII }
+    }
+
+    /// Whether the typed text is now readable on screen (the first few words are enough).
+    private func textShows(_ text: String) async -> Bool {
+        guard let frame = capture?.latestImage() else { return false }
+        let want = String(ascii(text).prefix(14)).lowercased().filter { $0.isLetter || $0.isNumber }
+        guard !want.isEmpty else { return true }
+        let onScreen = await ScreenReader.read(frame).map(\.text).joined(separator: " ")
+            .lowercased().filter { $0.isLetter || $0.isNumber }
+        return onScreen.contains(want)
     }
 
     private func type(_ text: String) async {
