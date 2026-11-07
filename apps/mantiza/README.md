@@ -29,7 +29,7 @@ These choices come from the [brain bench](../../tools/brain-bench/README.md).
 ## First-time setup on the iPhone
 1. **Pair the device:** Settings → Bluetooth.
 2. **Turn on AssistiveTouch:** Settings → Accessibility → Touch → AssistiveTouch. Set **Tracking Speed** to the highest.
-3. **Give mouse button 4 the job "Control Centre"**, so Mantiza can open Control Centre (flashlight and other quick switches): Settings → Accessibility → Touch → AssistiveTouch → Devices → **Mantiza** → Customize Additional Buttons. Press button 4 from the device (Mantiza does this when you add it), or choose it in the list, then pick **Control Center**.
+3. **Give mouse button 4 the job "Control Centre"**, so Mantiza can open Control Centre (flashlight and other quick switches): Settings → Accessibility → Touch → AssistiveTouch → Devices → **Mantiza** → Customize Additional Buttons. When iOS asks you to press the button, use the StickS3 menu: press the side button until **"b Button 4"** shows, then press the front button. Then pick **Control Center**.
 4. **Open Mantiza** and allow Bluetooth and notifications.
 5. **Device tab:**
    - Check that it says **Ready ✅**.
