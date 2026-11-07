@@ -87,15 +87,17 @@ final class Agent: ObservableObject {
         }
 
         // 3. Start from the Home Screen (never inside Mantiza itself), then open the app:
-        //    Control Centre with mouse button 4, any other app with Search (no AI needed).
+        //    Control Centre with a swipe down from the top-right corner, like a finger; any other
+        //    app with Search (no AI needed, nothing for the user to set up).
         status = "Going to the Home Screen…"
         await link.run("h")
         try? await Task.sleep(for: .milliseconds(700))
         if let app = task.app, app.lowercased().replacingOccurrences(of: " ", with: "").hasPrefix("controlcent") {
             status = "Opening Control Centre…"
-            await link.run("b 4")
+            // x 94% (right of the notch / Dynamic Island), from the very top down to 45%
+            await link.run("drag 30800 0 30800 14750")
             try? await Task.sleep(for: .milliseconds(900))
-            add("Opened Control Centre (mouse button 4)")
+            add("Opened Control Centre (swipe down from the top-right)")
         } else if let app = task.app {
             status = "Opening \(app)…"
             t = Date()

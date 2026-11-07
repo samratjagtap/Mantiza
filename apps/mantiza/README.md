@@ -27,15 +27,16 @@ The real Mantiza app: you type what you want, and Mantiza does it on the iPhone 
 These choices come from the [brain bench](../../tools/brain-bench/README.md).
 
 ## First-time setup on the iPhone
+Only what iOS requires for any mouse: pair the device and turn on AssistiveTouch. Everything else is Mantiza's job (for example it opens Control Centre with a swipe, not with a button you have to set up).
+
 1. **Pair the device:** Settings → Bluetooth.
-2. **Turn on AssistiveTouch:** Settings → Accessibility → Touch → AssistiveTouch. Set **Tracking Speed** to the highest.
-3. **Give mouse button 4 the job "Control Centre"**, so Mantiza can open Control Centre (flashlight and other quick switches): Settings → Accessibility → Touch → AssistiveTouch → Devices → **Mantiza** → Customize Additional Buttons. When iOS asks you to press the button, use the StickS3 menu: press the side button until **"b Button 4"** shows, then press the front button. Then pick **Control Center**.
-4. **Open Mantiza** and allow Bluetooth and notifications.
-5. **Device tab:**
+2. **Turn on AssistiveTouch:** Settings → Accessibility → Touch → AssistiveTouch.
+3. **Open Mantiza** and allow Bluetooth and notifications.
+4. **Device tab:**
    - Check that it says **Ready ✅**.
    - Under Pointer it should say **"Jumps straight to each point"**. With the old firmware, tap **Calibrate pointer** instead.
    - Tap **Start** under Eyes, and the device presses the share button.
-6. **Task tab:** type a request and tap **Go**.
+5. **Task tab:** type a request and tap **Go**.
 
 ## Keys
 The keys are in `C:\Users\PC\.mantiza\keys.env`, outside the repo. `scripts/make_secrets.py` copies them into `Sources/Mantiza/Secrets.swift`, which is in `.gitignore`.

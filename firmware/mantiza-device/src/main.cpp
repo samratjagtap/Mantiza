@@ -489,6 +489,21 @@ static void goTo(int x, int y) {
   mouseMove(0, y, GO_STEP);
 }
 
+// Drag (like a finger swipe): press at x1,y1, slide to x2,y2, let go. Absolute units (0..32767).
+// Used for system gestures, e.g. down from the top-right corner opens Control Centre.
+static void dragTo(int x1, int y1, int x2, int y2, int steps = 14) {
+#if ABSOLUTE_POINTER
+  sendMouseAbs(0, x1, y1, 0);
+  delay(60);
+  sendMouseAbs(0x01, x1, y1, 0);
+  delay(80);
+  for (int i = 1; i <= steps; i++)
+    sendMouseAbs(0x01, x1 + (x2 - x1) * i / steps, y1 + (y2 - y1) * i / steps, 0);
+  delay(60);
+  sendMouseAbs(0, x2, y2, 0);
+#endif
+}
+
 // T9: battery. The screen goes off (like the real device most of the time) and the
 // device sends "batt <percent> <millivolts> <minutes> <charging>" to the app every minute.
 // Any button turns the screen on for 10 s; the first press only wakes it.
@@ -630,6 +645,7 @@ static void printHelp() {
     "  go <x> <y>         pointer to x,y (absolute build: 0..32767 across the screen;\n"
     "                     relative build: counts from the top-left corner)\n"
     "  tap <x> <y>        same, then click\n"
+    "  drag <x1> <y1> <x2> <y2>  press, slide, let go (absolute build; 0..32767)\n"
     "  share              open the Mantiza app and ask it to share the screen\n"
     "  help               this list\n"
     "From the app only: ping <n> (-> pong <n>), ack <n>, beat <n>, hello");
@@ -680,6 +696,18 @@ static void handleCommand(String line, bool fromApp = false) {
   if ((isGo || isTap) && sscanf(line.c_str() + (isGo ? 2 : 3), "%d %d", &gx, &gy) == 2) {
     goTo(gx, gy);
     if (isTap) { delay(ABSOLUTE_POINTER ? 40 : 150); mouseClick(); }
+    lastAction = line.substring(0, 21);
+    reply("ok " + line, fromApp);
+    return;
+  }
+  int d1 = 0, d2 = 0, d3 = 0, d4 = 0;  // drag x1 y1 x2 y2 (absolute units)
+  if (wordIs(line, "drag")) {
+    if (!connected) { reply("not connected to the iPhone yet", fromApp); return; }
+    if (!ABSOLUTE_POINTER || sscanf(line.c_str() + 4, "%d %d %d %d", &d1, &d2, &d3, &d4) != 4) {
+      reply("error " + line, fromApp);
+      return;
+    }
+    dragTo(d1, d2, d3, d4);
     lastAction = line.substring(0, 21);
     reply("ok " + line, fromApp);
     return;
