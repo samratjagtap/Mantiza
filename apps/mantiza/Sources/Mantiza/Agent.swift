@@ -68,6 +68,7 @@ final class Agent: ObservableObject {
         let taskStart = Date()
 
         guard link.ready else { end("❌ Device not connected (Device tab)"); return }
+        guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
         guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
 
         // 1. Plan

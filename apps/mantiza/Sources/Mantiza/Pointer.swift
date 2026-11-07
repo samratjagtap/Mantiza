@@ -56,7 +56,10 @@ final class Pointer: ObservableObject {
 
     /// Taps a screen point (in points). Returns false if it couldn't.
     func tap(_ point: CGPoint) async -> Bool {
-        guard let link, let (cx, cy) = counts(for: point) else { note("Can't tap: not calibrated"); return false }
+        guard let link else { return false }
+        // Never guess the pointer type: an unknown device would get the wrong kind of numbers.
+        guard await link.confirmDevice() else { note("Can't tap: the device doesn't answer"); return false }
+        guard let (cx, cy) = counts(for: point) else { note("Can't tap: not calibrated"); return false }
         let reply = await link.run("tap \(cx) \(cy)")
         return reply.hasPrefix("ok")
     }

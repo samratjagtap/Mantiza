@@ -108,11 +108,42 @@ final class DeviceLink: NSObject, ObservableObject {
                 try? await Task.sleep(for: .seconds(timeout))
                 if let i = waiting.firstIndex(where: { $0.id == id }) {
                     waiting.remove(at: i).continuation.resume(returning: "timeout")
-                    lateReplies += 1
-                    note("No reply to \"\(text)\" within \(Int(timeout)) s")
+                    note("No reply to \"\(text)\" within \(Int(timeout)) s: reopening the command channel")
+                    refresh()
                 }
             }
         }
+    }
+
+    /// The device answers but the app hears nothing (seen after the device restarted while the app
+    /// kept running): open the command channel again, the same way as on first connect.
+    func refresh() {
+        failAllWaiting()
+        ready = false
+        writeChar = nil
+        absolute = nil
+        status = "Reopening the command channel…"
+        if let d = device, d.state == .connected { d.discoverServices([DeviceID.service]) } else { connect() }
+    }
+
+    /// Makes sure the app knows which pointer the device has (it says so in its "hi"). Asks again if
+    /// the first hello was lost. Returns false if the device doesn't answer within 3 s.
+    func confirmDevice() async -> Bool {
+        if absolute != nil { return true }
+        for _ in 0..<2 {
+            send("hello")
+            for _ in 0..<15 {
+                try? await Task.sleep(for: .milliseconds(100))
+                if absolute != nil { return true }
+            }
+        }
+        note("The device didn't answer hello: reopening the command channel")
+        refresh()
+        for _ in 0..<30 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if absolute != nil { return true }
+        }
+        return false
     }
 
     // MARK: - Receive
