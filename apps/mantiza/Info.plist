@@ -8,6 +8,21 @@
 	<string>Mantiza talks to your Mantiza device over Bluetooth so it can tap and type for you.</string>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Mantiza looks at the screen to see where to tap while it does a task for you.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Mantiza finds the person you name, so it can call or message them for you.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Mantiza adds the events you ask for to your calendar.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Mantiza adds the reminders you ask for.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Mantiza sets the alarms and timers you ask for.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mantiza turns the flashlight on and off when you ask.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>comgooglemaps</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

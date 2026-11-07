@@ -31,15 +31,18 @@ static const char* COMMAND_WRITE_UUID   = "2af74626-d331-4239-bd47-2ef715cab51e"
 static const char* COMMAND_EVENT_UUID   = "7a537076-9f59-4e6d-94eb-c90356cea6f3";  // device -> app (notify)
 
 // ---------------------------------------------------------------------------
-// HID report map: keyboard (report 1) + relative mouse (report 2)
+// HID report map: keyboard (report 1) + mouse (report 2) + special keys (report 3) + Focus (report 4)
 // ---------------------------------------------------------------------------
 static const uint8_t REPORT_ID_KEYBOARD = 1;
 static const uint8_t REPORT_ID_MOUSE    = 2;
+static const uint8_t REPORT_ID_CONSUMER = 3;
+static const uint8_t REPORT_ID_SYSTEM   = 4;
 
 // Bump this whenever REPORT_MAP or the list of services changes. The iPhone caches
 // both for a paired device, so a change needs a fresh pairing: old bonds are cleared on boot.
 // 3 = T2 command channel added. 4 = absolute pointer (5 = relative fallback build).
-static const uint32_t REPORT_MAP_VERSION = ABSOLUTE_POINTER ? 4 : 5;
+// 6 = special keys + Focus key added (7 = relative fallback build).
+static const uint32_t REPORT_MAP_VERSION = ABSOLUTE_POINTER ? 6 : 7;
 
 static const uint8_t REPORT_MAP[] = {
   // Keyboard
@@ -99,6 +102,32 @@ static const uint8_t REPORT_MAP[] = {
   0x81, 0x06,       //     Input (Data, Var, Rel)
 #endif
   0xC0,             //   End Collection
+  0xC0,             // End Collection
+
+  // Special keys: the HID Consumer page usages Apple lists for keyboards (Accessory Design
+  // Guidelines R32 Update 1, Table 14-3): Home, Lock, Screenshot, brightness, media, Siri,
+  // volume, Spotlight, Globe, on-screen keyboard. One 16-bit usage per report, 0 = released.
+  0x05, 0x0C,       // Usage Page (Consumer)
+  0x09, 0x01,       // Usage (Consumer Control)
+  0xA1, 0x01,       // Collection (Application)
+  0x85, REPORT_ID_CONSUMER,
+  0x15, 0x00, 0x26, 0xFF, 0x03,  // Logical 0..1023
+  0x19, 0x00, 0x2A, 0xFF, 0x03,  // Usage 0..0x3FF
+  0x75, 0x10, 0x95, 0x01,
+  0x81, 0x00,       //   Input (Data, Array): one usage
+  0xC0,             // End Collection
+
+  // Focus: Generic Desktop "System Do Not Disturb" (same guidelines, Table 14-4: Toggle Focus Mode)
+  0x05, 0x01,       // Usage Page (Generic Desktop)
+  0x09, 0x80,       // Usage (System Control)
+  0xA1, 0x01,       // Collection (Application)
+  0x85, REPORT_ID_SYSTEM,
+  0x09, 0x9B,       //   Usage (System Do Not Disturb)
+  0x15, 0x00, 0x25, 0x01,
+  0x75, 0x01, 0x95, 0x01,
+  0x81, 0x02,       //   Input (Data, Var, Abs): pressed bit
+  0x75, 0x07, 0x95, 0x01,
+  0x81, 0x01,       //   Input (Const): padding
   0xC0              // End Collection
 };
 
@@ -112,6 +141,8 @@ static const uint8_t MOD_LGUI   = 0x08;  // Command key on Apple devices
 static NimBLEHIDDevice*      hid           = nullptr;
 static NimBLECharacteristic* keyboardInput = nullptr;
 static NimBLECharacteristic* mouseInput    = nullptr;
+static NimBLECharacteristic* consumerInput = nullptr;
+static NimBLECharacteristic* systemInput   = nullptr;
 static volatile bool         connected     = false;
 
 // Commands written by the app arrive on the Bluetooth task; they are queued
@@ -187,6 +218,8 @@ static void setupBluetooth() {
   keyboardInput = hid->inputReport(REPORT_ID_KEYBOARD);
   hid->outputReport(REPORT_ID_KEYBOARD);
   mouseInput = hid->inputReport(REPORT_ID_MOUSE);
+  consumerInput = hid->inputReport(REPORT_ID_CONSUMER);
+  systemInput = hid->inputReport(REPORT_ID_SYSTEM);
 
   hid->manufacturer()->setValue("Mantiza");
   hid->pnp(0x02, 0xE502, 0xA111, 0x0210);  // USB vendor ID source, test IDs
@@ -396,6 +429,61 @@ static bool sendCombo(String combo, uint32_t holdMs = 0) {
 }
 
 // ---------------------------------------------------------------------------
+// Special keys (Consumer page) and the Focus key
+// ---------------------------------------------------------------------------
+struct SpecialKey { const char* name; uint16_t usage; };
+static const SpecialKey SPECIAL_KEYS[] = {
+  {"home", 0x0040},       {"lock", 0x0030},     {"screenshot", 0x0065},
+  {"brighter", 0x006F},   {"dimmer", 0x0070},   {"next", 0x00B5},
+  {"previous", 0x00B6},   {"playpause", 0x00CD}, {"siri", 0x00CF},
+  {"mute", 0x00E2},       {"louder", 0x00E9},   {"softer", 0x00EA},
+  {"keyboard", 0x01AE},   {"globe", 0x029D},    {"spotlight", 0x0221},
+};
+
+static void sendConsumer(uint16_t usage, uint32_t holdMs = 40) {
+  if (!connected || !consumerInput) return;
+  uint8_t press[2] = {(uint8_t)(usage & 0xFF), (uint8_t)(usage >> 8)};
+  uint8_t release[2] = {0, 0};
+  consumerInput->setValue(press, sizeof(press));
+  consumerInput->notify();
+  delay(REPORT_GAP_MS + holdMs);
+  consumerInput->setValue(release, sizeof(release));
+  consumerInput->notify();
+  delay(REPORT_GAP_MS);
+}
+
+static void sendFocusKey() {
+  if (!connected || !systemInput) return;
+  uint8_t press = 0x01, release = 0x00;
+  systemInput->setValue(&press, 1);
+  systemInput->notify();
+  delay(REPORT_GAP_MS + 40);
+  systemInput->setValue(&release, 1);
+  systemInput->notify();
+  delay(REPORT_GAP_MS);
+}
+
+// "key <name> [times]" or "key 0x00e9 [times]". Returns false if the name is unknown.
+static bool pressSpecialKey(String args) {
+  args.trim();
+  args.toLowerCase();
+  int times = 1;
+  int sp = args.indexOf(' ');
+  if (sp > 0) { times = constrain(args.substring(sp + 1).toInt(), 1, 20); args = args.substring(0, sp); }
+  for (int i = 0; i < times; i++) {
+    if (args == "focus") { sendFocusKey(); }
+    else if (args.startsWith("0x")) { sendConsumer((uint16_t)strtol(args.c_str() + 2, nullptr, 16)); }
+    else {
+      bool found = false;
+      for (auto& k : SPECIAL_KEYS) if (args == k.name) { sendConsumer(k.usage); found = true; break; }
+      if (!found) return false;
+    }
+    if (times > 1) delay(60);
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
 // Actions used by the app
 // ---------------------------------------------------------------------------
 // Opens the Mantiza app through Search and asks it to start screen sharing (the app shows
@@ -523,6 +611,8 @@ static void printHelp() {
     "  tap <x> <y>        same, then click\n"
     "  drag <x1> <y1> <x2> <y2>  press, slide, let go (absolute build; 0..32767)\n"
     "  share              open the Mantiza app and ask it to share the screen\n"
+    "  key <name> [n]     special key: home lock screenshot brighter dimmer louder softer mute\n"
+    "                     playpause next previous siri spotlight globe keyboard focus, or 0x....\n"
     "  status <text>      show what Mantiza is doing (no reply)\n"
     "  task on|off        a task is running: front button = Stop (no reply)\n"
     "  help               this list\n"
@@ -570,6 +660,12 @@ static void handleCommand(String line, bool fromApp = false) {
       return;
     }
     dragTo(d1, d2, d3, d4);
+    reply("ok " + line, fromApp);
+    return;
+  }
+  if (wordIs(line, "key")) {
+    if (!connected) { reply("not connected to the iPhone yet", fromApp); return; }
+    if (!pressSpecialKey(line.substring(3))) { reply("error " + line, fromApp); return; }
     reply("ok " + line, fromApp);
     return;
   }

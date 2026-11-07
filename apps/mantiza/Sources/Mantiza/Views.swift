@@ -8,8 +8,10 @@ struct TaskView: View {
     @State private var request = ""
     @FocusState private var typing: Bool
 
-    private let examples = ["Turn on the flashlight", "Open WhatsApp and message Azad: I'm coming",
-                            "Set an alarm for 7 AM", "Turn off Bluetooth"]
+    private let examples = ["Message Azad on WhatsApp: I'm coming", "Set an alarm for 7 AM every weekday",
+                            "Timer for 10 minutes", "Turn on the flashlight", "Brightness to 30%",
+                            "Remind me to buy milk tomorrow at 9", "Call Azad", "Directions to India Gate",
+                            "Volume up", "Turn on Do Not Disturb", "Turn off Wi-Fi"]
 
     var body: some View {
         NavigationStack {

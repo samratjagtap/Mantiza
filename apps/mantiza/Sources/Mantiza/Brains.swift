@@ -172,32 +172,70 @@ final class BigBrain {
         return obj
     }
 
-    /// Turns the user's request into a subtask (text only, once per task).
-    func plan(_ request: String) async throws -> Subtask {
+    /// Turns the user's request into plan steps (text only, once per task). Direct iOS actions
+    /// wherever iOS has one; "screen" steps (the AI loop) only for the rest.
+    func plan(_ request: String) async throws -> Plan {
+        let now = Date()
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "EEEE yyyy-MM-dd HH:mm"
         let prompt = """
-        You plan tasks for Mantiza, an assistant that operates an iPhone by tapping and typing.
+        You are the planner of Mantiza, an assistant like Siri that does things on the user's iPhone.
+        It can do some things directly through iOS (fast and exact), and anything else by looking at the
+        screen and tapping/typing like a person ("screen" steps, slower).
+        Now: \(f.string(from: now)), time zone \(TimeZone.current.identifier). Phone region: \(Locale.current.region?.identifier ?? "?").
         User request: "\(request)"
 
-        Reply with only a JSON object:
-        {"app": name of the iPhone app to open exactly as on the Home Screen (e.g. "WhatsApp", "Settings", "Clock"),
-                or "Control Center" for quick switches that live there (flashlight, rotation lock, screen mirroring,
-                calculator shortcut, timer shortcut, camera shortcut), or null,
-         "goal": one sentence: what must be true on the screen when the task is done,
-         "text": the exact text to type, copied from the request (never invent or translate), or null,
-         "success_text": a short piece of text that will be visible on screen when done, or null if unsure,
-         "needs_approval": true ONLY if the task pays, buys, orders, transfers money, deletes something or posts publicly.
-                False for sending a message or making a call the user asked for: sending it is the task itself.
-                Never ask about something the user explicitly requested,
-         "max_steps": number of taps it should take at most, between 4 and 15,
-         "state": if the task turns one of these on or off: \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null,
-         "state_value": true if it must end up on, false if off; null if no state}
+        Split the request into steps, in order. ALWAYS use a direct action when one fits; use "screen" only
+        for what no direct action covers. Copy names and texts exactly from the request (never invent or translate).
+
+        Direct actions (fields in brackets):
+        - "answer" [text]: just reply, for questions you can answer yourself (facts, maths, advice, jokes).
+          Not for live data (weather, news, scores, prices): use a screen step in the right app instead.
+        - "alarm" [time "HH:mm" 24h, days: ["monday",...] for repeating or [] for once, text: label or null]
+        - "timer" [seconds, text: label or null]
+        - "event" [text: title, start "yyyy-MM-ddTHH:mm", end or null]: calendar event
+        - "reminder" [text, start: due "yyyy-MM-ddTHH:mm" or null]
+        - "call" [contact: the name as said, or phone: digits if a number was given]
+        - "whatsapp" [contact or phone, text]: send a WhatsApp message
+        - "sms" [contact or phone, text]: send an iMessage/SMS (when the user says text/message without naming an app)
+        - "email" [contact or email, subject, text]
+        - "directions" [destination, mode: driving/walking/transit/cycling, maps: "apple" or "google"]
+        - "brightness" [value 0.0-1.0]
+        - "flashlight" [on: true/false]
+        - "key" [key, count]: a key on the user's Mantiza device. Keys: home, lock (locks the phone; only as the
+          very last step), screenshot, louder, softer, mute (volume; one press is about 6%: "volume up" = count 3),
+          playpause, next, previous (music/video), focus (toggles Do Not Disturb/Focus), siri.
+        - "open_app" [app]: only open an app, nothing else.
+
+        Screen step (AI looks and taps):
+        - "screen" [app, goal, text, success_text, needs_approval, max_steps, state, state_value]
+          app: the iPhone app to open exactly as on the Home Screen (e.g. "Settings", "Swiggy", "Instagram"), or
+               "Control Center" for Wi-Fi, Bluetooth, Airplane Mode, rotation lock, screen mirroring; or null.
+          goal: one sentence: what must be true on the screen when the step is done.
+          text: exact text to type, or null. success_text: short text visible when done, or null.
+          needs_approval: true ONLY if the step pays, buys, orders, transfers money, deletes something or posts
+               publicly. False for messages and calls the user asked for.
+          max_steps: taps it should take at most, 4-15.
+          state/state_value: if it turns one of these on/off: \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null.
+          Low Power Mode and Dark Mode: app "Settings".
+
+        Rules:
+        - Never turn Bluetooth off: it disconnects the Mantiza device. Reply with an "answer" that says so.
+        - If the request is unclear or impossible, one "answer" step that says what is missing.
+
+        Reply with only JSON: {"reply": one short friendly sentence for the user (what you will do, or the answer),
+                               "steps": [ {"action": ..., other fields...}, ... ]}
         """
         let obj = try await generate(parts: [["text": prompt]])
         let data = try JSONSerialization.data(withJSONObject: obj)
-        var sub = try JSONDecoder().decode(Subtask.self, from: data)
-        if sub.text?.isEmpty == true { sub.text = nil }
-        if sub.app?.isEmpty == true { sub.app = nil }
-        return sub
+        var plan = try JSONDecoder().decode(Plan.self, from: data)
+        for i in plan.steps.indices {
+            if plan.steps[i].text?.isEmpty == true { plan.steps[i].text = nil }
+            if plan.steps[i].app?.isEmpty == true { plan.steps[i].app = nil }
+            plan.steps[i].action = plan.steps[i].action.lowercased()
+        }
+        return plan
     }
 
     /// Finds where to tap next on a screenshot.
