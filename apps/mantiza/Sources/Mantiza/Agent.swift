@@ -123,6 +123,15 @@ final class Agent: ObservableObject {
             if stopRequested { end("⏹ Stopped"); return }
             status = "Step \(n): looking…"
             await capture.waitForSettle()
+
+            // Exact check straight from iOS, where it can tell (flashlight, Low Power Mode, Dark Mode)
+            if let name = task.state, let want = task.state_value, let now = PhoneState.read(name), now == want {
+                let what = name.replacingOccurrences(of: "_", with: " ") + (want ? " is on" : " is off")
+                end(history.isEmpty ? "✅ Already done: \(what) (checked with iOS)"
+                                    : "✅ Done in \(seconds(since: taskStart)): \(what) (checked with iOS)")
+                return
+            }
+
             guard let frame = capture.latestImage() else { end("❌ No screen image"); return }
             t = Date()
             let items = await ScreenReader.read(frame)
@@ -145,7 +154,11 @@ final class Agent: ObservableObject {
             }
             actions.append(("scroll", "scroll down to find what is needed"))
             actions.append(("done", "the goal is already reached on this screen"))
-            var questions = [FastBrain.Question(name: "action", instructions: "What should be done next to reach the goal?", options: actions)]
+            var questions = [
+                FastBrain.Question(name: "action", instructions: "What should be done next to reach the goal?", options: actions),
+                FastBrain.Question(name: "reached", instructions: "Look at the screen: is the goal already reached? Goal: \(task.goal)",
+                                   options: [("yes", "yes, the screen shows the goal is reached"), ("no", "no, not yet")]),
+            ]
             if !items.isEmpty {
                 questions.append(FastBrain.Question(
                     name: "target", instructions: "If a numbered box should be tapped, which one?",
@@ -162,6 +175,12 @@ final class Agent: ObservableObject {
             let target = answers["target"]
             let decideTime = seconds(since: t)
             let shot = UIImage(data: marked)
+
+            if let reached = answers["reached"], reached.value == "yes", reached.confidence >= 0.7, !history.isEmpty {
+                add("Step \(n): goal reached (\(String(format: "%.0f%%", reached.confidence * 100)) sure)", image: shot)
+                end("✅ Done in " + seconds(since: taskStart))
+                return
+            }
 
             // Act
             var point: CGPoint?  // in frame pixels
@@ -217,6 +236,14 @@ final class Agent: ObservableObject {
                 status = "Waiting for your OK…"
                 add("Step \(n): asking before tapping \"\(label)\"", image: shot)
                 guard await approvals.ask("Tap \"\(label)\"? (\(task.goal))") else { end("⏹ Not approved: nothing tapped"); return }
+            }
+
+            // Never tap the same thing twice in a row: a switch would just turn back. If the last tap
+            // changed the screen, it most likely worked.
+            if !unchanged, !lastLabel.isEmpty, label.lowercased() == lastLabel.lowercased() {
+                add("Step \(n): \"\(label)\" was just tapped; not tapping it again", image: shot)
+                end("✅ Probably done in \(seconds(since: taskStart)) (not checked: iOS doesn't report this setting)")
+                return
             }
 
             // Don't keep tapping the same spot if nothing happens

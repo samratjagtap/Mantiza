@@ -139,6 +139,8 @@ struct Subtask: Codable {
     var success_text: String?  // short text that will be on screen when done; nil if unsure
     var needs_approval: Bool?  // sends, posts, buys, deletes or calls something
     var max_steps: Int?
+    var state: String?         // a setting iOS lets the app read (PhoneState.names), or nil
+    var state_value: Bool?     // the value it must have at the end
 }
 
 struct TapPoint {
@@ -184,7 +186,9 @@ final class BigBrain {
          "text": the exact text to type, copied from the request (never invent or translate), or null,
          "success_text": a short piece of text that will be visible on screen when done, or null if unsure,
          "needs_approval": true if the task sends, posts, buys, pays, deletes or calls anything, else false,
-         "max_steps": number of taps it should take at most, between 4 and 15}
+         "max_steps": number of taps it should take at most, between 4 and 15,
+         "state": if the task turns one of these on or off: \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null,
+         "state_value": true if it must end up on, false if off; null if no state}
         """
         let obj = try await generate(parts: [["text": prompt]])
         let data = try JSONSerialization.data(withJSONObject: obj)
