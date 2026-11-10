@@ -1,5 +1,7 @@
+import MantizaKit
 import SwiftUI
 import UIKit
+import WidgetKit
 
 struct Step: Identifiable {
     let id = UUID()
@@ -90,6 +92,9 @@ final class Agent: ObservableObject {
             link.send("task off")
             if keepAlive != .invalid { UIApplication.shared.endBackgroundTask(keepAlive) }
             RunLog.shared.finish(result: status, deviceLog: link.log)
+            // The widget shows recent tasks and the last result.
+            Shared.record(prompt: request, ok: status.hasPrefix("✅") || status.hasPrefix("💬"), result: status)
+            WidgetCenter.shared.reloadAllTimelines()
         }
         taskStart = Date()
         answers = []
