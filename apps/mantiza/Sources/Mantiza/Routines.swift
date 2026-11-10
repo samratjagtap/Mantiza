@@ -64,6 +64,18 @@ final class RoutineStore: ObservableObject {
 
     var names: [String] { all.map(\.name) }
 
+    /// The words of an app's start screen: what the first step of its routines expects to see
+    /// (words found on at least half of them). Nil until a routine for the app was learned.
+    func startWords(app: String) -> [String]? {
+        let firsts = all.filter { ($0.app ?? "").lowercased() == app.lowercased() }.compactMap { $0.steps.first?.before }
+        guard !firsts.isEmpty else { return nil }
+        if firsts.count == 1 { return firsts[0] }
+        var counts: [String: Int] = [:]
+        for words in firsts { for w in Set(words) { counts[w, default: 0] += 1 } }
+        let common = counts.filter { $0.value * 2 >= firsts.count }.map(\.key)
+        return common.isEmpty ? nil : common
+    }
+
     func find(_ name: String?) -> Routine? {
         guard let name else { return nil }
         let key = Words.norm(name)
