@@ -33,7 +33,15 @@ struct TaskView: View {
                     Text(agent.status)
                 }
 
-                if let q = approvals.question {
+                if let q = approvals.question, let choices = approvals.choices {
+                    Section("Which one?") {
+                        Text(q)
+                        ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
+                            Button(c) { approvals.pick(i) }
+                        }
+                        Button("None of these", role: .destructive) { approvals.pick(nil) }
+                    }
+                } else if let q = approvals.question {
                     Section("Needs your OK") {
                         Text(q)
                         HStack {

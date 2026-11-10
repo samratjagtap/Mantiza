@@ -8,8 +8,12 @@ import UserNotifications
 @MainActor
 final class Approvals: NSObject, ObservableObject {
     @Published var question: String?
+    /// When the open question is a choice ("Which Azad?"), its options; nil for yes/no.
+    @Published var choices: [String]?
 
     private var waiting: CheckedContinuation<Bool, Never>?
+    private var choosing: CheckedContinuation<Int?, Never>?
+    private var approvalCategory: UNNotificationCategory?
     private var waitingID: String?
     private let center = UNUserNotificationCenter.current()
 
@@ -17,8 +21,9 @@ final class Approvals: NSObject, ObservableObject {
         center.delegate = self
         let approve = UNNotificationAction(identifier: "APPROVE", title: "Approve", options: [])
         let deny = UNNotificationAction(identifier: "DENY", title: "Don't", options: [.destructive])
-        center.setNotificationCategories([UNNotificationCategory(identifier: "MANTIZA_APPROVAL",
-                                                                 actions: [approve, deny], intentIdentifiers: [])])
+        let category = UNNotificationCategory(identifier: "MANTIZA_APPROVAL", actions: [approve, deny], intentIdentifiers: [])
+        approvalCategory = category
+        center.setNotificationCategories([category])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
@@ -43,8 +48,49 @@ final class Approvals: NSObject, ObservableObject {
         }
     }
 
+    /// Asks the user to pick one option ("Which Azad?"). Nil = no answer within the time, or none.
+    /// It is a question about what the user meant, not an approval: asked only when the request
+    /// could mean several things.
+    func choose(_ text: String, options: [String], timeout: Double = 60) async -> Int? {
+        answer(false)
+        let shown = Array(options.prefix(6))
+        let actions = shown.enumerated().map { UNNotificationAction(identifier: "PICK_\($0.offset)", title: $0.element, options: []) }
+            + [UNNotificationAction(identifier: "PICK_NONE", title: "None of these", options: [.destructive])]
+        let choice = UNNotificationCategory(identifier: "MANTIZA_CHOICE", actions: actions, intentIdentifiers: [])
+        center.setNotificationCategories(Set([choice] + (approvalCategory.map { [$0] } ?? [])))
+        let id = UUID().uuidString
+        let content = UNMutableNotificationContent()
+        content.title = "Mantiza: which one?"
+        content.body = text + " (long-press to choose)"
+        content.sound = .default
+        content.categoryIdentifier = "MANTIZA_CHOICE"
+        try? await Task.sleep(for: .milliseconds(300))  // let iOS register the new buttons first
+        try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        question = text
+        choices = shown
+        waitingID = id
+        return await withCheckedContinuation { continuation in
+            choosing = continuation
+            Task {
+                try? await Task.sleep(for: .seconds(timeout))
+                if waitingID == id { pick(nil) }
+            }
+        }
+    }
+
+    /// Answers the open choice (from the notification or the Task tab).
+    func pick(_ index: Int?) {
+        if let id = waitingID { center.removeDeliveredNotifications(withIdentifiers: [id]) }
+        question = nil
+        choices = nil
+        waitingID = nil
+        choosing?.resume(returning: index)
+        choosing = nil
+    }
+
     /// Answers the open question (from the notification or the Task tab).
     func answer(_ approved: Bool) {
+        if choosing != nil { pick(nil); return }
         if let id = waitingID { center.removeDeliveredNotifications(withIdentifiers: [id]) }
         question = nil
         waitingID = nil
@@ -56,10 +102,15 @@ final class Approvals: NSObject, ObservableObject {
 extension Approvals: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
-        let approved = response.actionIdentifier == "APPROVE"
+        let action = response.actionIdentifier
         let id = response.notification.request.identifier
         Task { @MainActor in
-            if self.waitingID == id { self.answer(approved) }
+            guard self.waitingID == id else { return }
+            if action.hasPrefix("PICK_") {
+                self.pick(Int(action.dropFirst(5)))
+            } else {
+                self.answer(action == "APPROVE")
+            }
         }
         completionHandler()
     }

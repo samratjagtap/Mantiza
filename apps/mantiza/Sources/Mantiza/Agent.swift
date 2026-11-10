@@ -239,11 +239,29 @@ final class Agent: ObservableObject {
         } else if let email = step.email, !email.isEmpty, kind == "email" {
             person = Direct.Person(name: email, phone: nil, email: email)
         } else if let name = step.contact, !name.isEmpty {
-            person = await Direct.lookUp(name)
-            if let person { add("Found \(person.name) in Contacts") } else { add("\(name) isn't in Contacts (or no permission)") }
+            let found = await Direct.lookUp(name)
+            if let clear = found.clear {
+                person = clear
+                add("Found \(clear.name) in Contacts" + (found.people.count > 1 ? " (your choice for \"\(name)\")" : ""))
+            } else if found.people.count > 1 {
+                // Several people match: never guess. Ask once, and remember the answer for this name.
+                status = "Which \(name)? Choose on the phone"
+                let names = found.people.map { p in p.name + (p.phone.map { " (…\($0.suffix(4)))" } ?? "") }
+                add("\(found.people.count) contacts match \"\(name)\": asking which one")
+                guard let i = await approvals.choose("Which \(name)? \(appName(kind)) \(step.text.map { "\"\($0)\"" } ?? "")", options: names),
+                      i < found.people.count else {
+                    end("⏹ No contact chosen: nothing sent"); return false
+                }
+                person = found.people[i]
+                Direct.remember(found.people[i], for: name)
+                add("You chose \(found.people[i].name); next time \"\(name)\" means \(found.people[i].name)")
+            } else {
+                add("\(name) isn't in Contacts (or no permission)")
+            }
         }
 
-        let appName = ["call": "Phone", "whatsapp": "WhatsApp", "sms": "Messages", "email": "Mail"][kind] ?? kind
+        let business = kind == "whatsapp" && step.business == true
+        let appName = business ? "WhatsApp Business" : appName(kind)
         let what = step.text.map { "\"\($0)\"" } ?? ""
         let url: URL? = switch kind {
         case "call": person?.phone.flatMap { Direct.callURL(phone: $0) }
@@ -275,18 +293,48 @@ final class Agent: ObservableObject {
         add("Opened \(appName) for \(person?.name ?? who) (link)" + (kind == "call" ? "" : " with \(what) filled in"))
         try? await Task.sleep(for: .milliseconds(1200))
 
+        // With both WhatsApp apps installed, the link asks "Message" (this app) or "Open in WhatsApp
+        // Business". Code answers it: normal WhatsApp, unless the user said WhatsApp Business.
+        if kind == "whatsapp", await screenShows("Open in WhatsApp Business", within: 3) {
+            let pick = business ? "Open in WhatsApp Business" : "Message"
+            if await tapText([pick], within: 2) {
+                add("WhatsApp asked which app: chose \(business ? "WhatsApp Business" : "WhatsApp")")
+                try? await Task.sleep(for: .milliseconds(1000))
+            }
+        }
+
         if kind == "call" {
             // iOS may ask "Call …?" first: tap Call. If it dials straight away, nothing to tap.
             if await tapText(["Call"], within: 3) { add("Tapped Call") }
             return true
         }
         return await doScreen(Subtask(app: nil,
-                                      goal: "The message \(what) is sent to \(person?.name ?? who) in \(appName): it shows as a sent message in the chat, not in the text box",
+                                      goal: "The message \(what) is sent to \(person?.name ?? who) in \(appName)" + (kind == "whatsapp" && !business ? " (not WhatsApp Business)" : "")
+                                          + ": it shows as a sent message in the chat, not in the text box. The chat is already open with the text in the box: only tap Send",
                                       text: nil, success_text: nil, needs_approval: false, max_steps: 5,
                                       state: nil, state_value: nil),
-                              routine: "\(appName.lowercased()): tap send after the link opened the chat",
+                              routine: "\(appName.lowercased()): send after the link opened the chat",
                               values: ["person": person?.name ?? who, "message": step.text ?? ""],
                               openApp: false, typedAlready: true)
+    }
+
+    private func appName(_ kind: String) -> String {
+        ["call": "Phone", "whatsapp": "WhatsApp", "sms": "Messages", "email": "Mail"][kind] ?? kind
+    }
+
+    /// Whether some text shows on screen within a few seconds (read on the phone, no AI).
+    private func screenShows(_ text: String, within limit: Double) async -> Bool {
+        guard let capture else { return false }
+        let want = Words.norm(text)
+        let until = Date().addingTimeInterval(limit)
+        while Date() < until {
+            await capture.waitForSettle(quiet: 0.3, maxWait: 1.5)
+            if let frame = capture.latestImage(), await ScreenReader.read(frame).contains(where: { Words.norm($0.text).contains(want) }) {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        return false
     }
 
     // MARK: - Getting around

@@ -47,9 +47,14 @@ final class RoutineStore: ObservableObject {
 
     init() {
         if let data = try? Data(contentsOf: file), let list = try? JSONDecoder().decode([Routine].self, from: data) {
-            all = list
+            all = list.filter { !Self.retired.contains($0.name) }
+            if all.count != list.count { write() }
         }
     }
+
+    /// Routines learned wrongly by older builds; dropped on start.
+    /// 2026-11-10: the WhatsApp send routine had learned "Open in WhatsApp Business" (debug run 2026-11-10_111607).
+    private static let retired: Set<String> = ["whatsapp: tap send after the link opened the chat"]
 
     var names: [String] { all.map(\.name) }
 

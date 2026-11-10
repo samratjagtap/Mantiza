@@ -214,7 +214,8 @@ final class BigBrain {
         - "event" [text: title, start "yyyy-MM-ddTHH:mm", end or null]: calendar event
         - "reminder" [text, start: due "yyyy-MM-ddTHH:mm" or null]
         - "call" [contact: the name as said, or phone: digits if a number was given]
-        - "whatsapp" [contact or phone, text]: send a WhatsApp message
+        - "whatsapp" [contact or phone, text, business: true ONLY if the user says "WhatsApp Business"]: send a WhatsApp message.
+          contact: the name exactly as the user said it (e.g. "Azad"); Mantiza asks the user if several contacts match
         - "sms" [contact or phone, text]: send an iMessage/SMS (when the user says text/message without naming an app)
         - "email" [contact or email, subject, text]
         - "directions" [destination, mode: driving/walking/transit/cycling, maps: "apple" or "google"]

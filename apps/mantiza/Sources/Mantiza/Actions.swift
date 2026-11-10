@@ -40,6 +40,7 @@ struct PlanStep: Codable {
     var max_steps: Int?
     var state: String?
     var state_value: Bool?
+    var business: Bool?               // WhatsApp Business instead of WhatsApp (only when the user says so)
     var routine: String?              // the kind of screen task, for record-once replay
     var values: [String: String]?     // this task's values for the routine's {blanks}
 
@@ -203,31 +204,59 @@ enum Direct {
     // MARK: Contacts
 
     struct Person {
+        var id: String = ""  // the contact's identifier ("" for a number typed by the user)
         let name: String
         let phone: String?   // international digits, e.g. 919812345678
         let email: String?
     }
 
-    /// Finds a contact by the name the user said. Nil if not found or not allowed.
-    static func lookUp(_ name: String) async -> Person? {
-        let contacts = CNContactStore()
+    private static let contactKeys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactNicknameKey,
+                                      CNContactPhoneNumbersKey, CNContactEmailAddressesKey] as [CNKeyDescriptor]
+
+    private static func contactsAllowed(_ store: CNContactStore) async -> Bool {
         if CNContactStore.authorizationStatus(for: .contacts) == .notDetermined {
-            _ = try? await contacts.requestAccess(for: .contacts)
+            _ = try? await store.requestAccess(for: .contacts)
         }
         let status = CNContactStore.authorizationStatus(for: .contacts)
-        guard status == .authorized || status == .limited else { return nil }
-        let keys = [CNContactGivenNameKey, CNContactFamilyNameKey, CNContactNicknameKey,
-                    CNContactPhoneNumbersKey, CNContactEmailAddressesKey] as [CNKeyDescriptor]
-        let found = (try? contacts.unifiedContacts(matching: CNContact.predicateForContacts(matchingName: name),
-                                                   keysToFetch: keys)) ?? []
-        // Prefer someone with a phone number, and a mobile number over others.
-        guard let c = found.first(where: { !$0.phoneNumbers.isEmpty }) ?? found.first else { return nil }
+        return status == .authorized || status == .limited
+    }
+
+    private static func person(_ c: CNContact, fallbackName: String) -> Person {
         let mobile = c.phoneNumbers.first { [CNLabelPhoneNumberMobile, CNLabelPhoneNumberiPhone].contains($0.label ?? "") }
             ?? c.phoneNumbers.first
         let full = [c.givenName, c.familyName].filter { !$0.isEmpty }.joined(separator: " ")
-        return Person(name: full.isEmpty ? name : full,
+        return Person(id: c.identifier, name: full.isEmpty ? fallbackName : full,
                       phone: mobile.map { international($0.value.stringValue) },
                       email: c.emailAddresses.first.map { String($0.value) })
+    }
+
+    /// Everyone in Contacts whose name matches what the user said, and whether the match is clear:
+    /// one person only, a full name typed exactly, or the person the user picked last time for
+    /// this name. When it isn't clear, Mantiza asks "Which Azad?" and remembers the answer.
+    static func lookUp(_ name: String) async -> (people: [Person], clear: Person?) {
+        let store = CNContactStore()
+        guard await contactsAllowed(store) else { return ([], nil) }
+        let found = ((try? store.unifiedContacts(matching: CNContact.predicateForContacts(matchingName: name),
+                                                 keysToFetch: contactKeys)) ?? []).map { person($0, fallbackName: name) }
+        let reachable = found.filter { $0.phone != nil || $0.email != nil }
+        let people = reachable.isEmpty ? found : reachable
+        if people.count == 1 { return (people, people[0]) }
+        let said = name.lowercased().trimmingCharacters(in: .whitespaces)
+        let exact = people.filter { $0.name.lowercased() == said }
+        if exact.count == 1 { return (people, exact[0]) }
+        if let id = UserDefaults.standard.string(forKey: aliasKey(name)), let picked = people.first(where: { $0.id == id }) {
+            return (people, picked)
+        }
+        return (people, nil)
+    }
+
+    /// Remembers which contact the user means by a name ("Azad" → Azad Jagtap).
+    static func remember(_ person: Person, for name: String) {
+        UserDefaults.standard.set(person.id, forKey: aliasKey(name))
+    }
+
+    private static func aliasKey(_ name: String) -> String {
+        "contact.alias." + name.lowercased().trimmingCharacters(in: .whitespaces)
     }
 
     /// "+91 98123 45678", "098123 45678" or "98123 45678" → "919812345678" (country from the phone's region).
