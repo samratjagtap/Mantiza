@@ -23,6 +23,13 @@
 		<string>whatsapp</string>
 		<string>comgooglemaps</string>
 	</array>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Development builds send task reports to the developer's computer on this Wi-Fi.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>bluetooth-central</string>

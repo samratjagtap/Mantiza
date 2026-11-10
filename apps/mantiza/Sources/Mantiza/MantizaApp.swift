@@ -6,6 +6,7 @@ struct MantizaApp: App {
     @StateObject private var capture = ScreenCapture()
     @StateObject private var pointer = Pointer()
     @StateObject private var agent = Agent()
+    @Environment(\.scenePhase) private var phase
 
     var body: some Scene {
         WindowGroup {
@@ -32,6 +33,10 @@ struct MantizaApp: App {
                 // The device's menu item "4 Share screen" opens this app and sends "share".
                 link.onShare = { [weak pointer = pointer] in Task { _ = await pointer?.startSharing() } }
                 link.onStop = { [weak agent = agent] in agent?.stop() }
+            }
+            // Development builds: send waiting task reports to the debug inbox on the PC.
+            .onChange(of: phase) { _, now in
+                if now == .active { Task { await RunLog.shared.flush() } }
             }
         }
     }

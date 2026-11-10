@@ -57,6 +57,7 @@ final class Agent: ObservableObject {
 
     private func add(_ text: String, image: UIImage? = nil) {
         steps.append(Step(text: text, image: image))
+        RunLog.shared.step(text, image: image)
         link?.note("[task] \(text)")
     }
 
@@ -75,6 +76,7 @@ final class Agent: ObservableObject {
         stopRequested = false
         steps = []
         link.send("task on")
+        RunLog.shared.begin(request)
         // Ask iOS for extra time to keep running while other apps are in front.
         var keepAlive = UIBackgroundTaskIdentifier.invalid
         keepAlive = UIApplication.shared.beginBackgroundTask(withName: "Mantiza task") {
@@ -85,6 +87,7 @@ final class Agent: ObservableObject {
             running = false
             link.send("task off")
             if keepAlive != .invalid { UIApplication.shared.endBackgroundTask(keepAlive) }
+            RunLog.shared.finish(result: status, deviceLog: link.log)
         }
         taskStart = Date()
 
@@ -97,6 +100,7 @@ final class Agent: ObservableObject {
         let t = Date()
         let plan: Plan
         do { plan = try await big.plan(request, known: routines.names) } catch { end("❌ Couldn't plan: \(error.localizedDescription)"); return }
+        RunLog.shared.plan(plan)
         add("Plan (\(seconds(since: t))): " + (plan.steps.isEmpty ? "nothing to do" : plan.steps.map(\.summary).joined(separator: " → ")))
 
         if plan.steps.isEmpty || plan.steps.allSatisfy({ $0.action == "answer" }) {
