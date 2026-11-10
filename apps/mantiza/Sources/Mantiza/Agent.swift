@@ -70,9 +70,16 @@ final class Agent: ObservableObject {
         stopRequested = false
         steps = []
         link.send("task on")
+        // Ask iOS for extra time to keep running while other apps are in front.
+        var keepAlive = UIBackgroundTaskIdentifier.invalid
+        keepAlive = UIApplication.shared.beginBackgroundTask(withName: "Mantiza task") {
+            UIApplication.shared.endBackgroundTask(keepAlive)
+            keepAlive = .invalid
+        }
         defer {
             running = false
             link.send("task off")
+            if keepAlive != .invalid { UIApplication.shared.endBackgroundTask(keepAlive) }
         }
         taskStart = Date()
 
@@ -364,6 +371,7 @@ final class Agent: ObservableObject {
         }
 
         // 4. Look → decide → act
+        var brainFails = 0  // big brain calls that didn't answer in this step loop
         var typed = typedAlready
         var typeTries = 0
         var history: [String] = []
@@ -423,7 +431,7 @@ final class Agent: ObservableObject {
             var answers: [String: Choice] = [:]
             do { answers = try await fast.ask(context: context, image: marked, questions: questions) } catch {
                 // Not fatal: the big brain takes this step.
-                add("Step \(n): fast brain didn't answer (\(error.localizedDescription.prefix(80))); asking the big brain")
+                add("Step \(n): fast brain didn't answer after \(seconds(since: t)) (\(error.localizedDescription.prefix(60)); \(conditions())); asking the big brain")
             }
             let action = answers["action"] ?? Choice(value: "icon", confidence: 0)
             let target = answers["target"]
@@ -505,7 +513,13 @@ final class Agent: ObservableObject {
                     label = p.what
                     add("Step \(n): big brain → \"\(p.what)\" (\(seconds(since: t))); fast brain said \(action.value) \(String(format: "%.0f%%", action.confidence * 100))")
                 } catch {
-                    end("❌ Big brain failed: \(error.localizedDescription)"); return false
+                    // A dropped connection or a pause by iOS: wait a moment and look again.
+                    brainFails += 1
+                    let why = "\(error.localizedDescription.prefix(60)) after \(seconds(since: t)); \(conditions())"
+                    if brainFails >= 3 { end("❌ Big brain didn't answer 3 times (\(why))"); return false }
+                    add("Step \(n): big brain didn't answer (\(why)); trying this step again")
+                    try? await Task.sleep(for: .seconds(2))
+                    continue
                 }
             }
             guard let tapAt = point else { end("❌ Nothing to tap"); return false }
@@ -544,6 +558,14 @@ final class Agent: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    /// What was going on when a brain didn't answer: tells "no internet" apart from "iOS paused Mantiza".
+    private func conditions() -> String {
+        var parts = [Net.online ? "internet on" : "NO INTERNET"]
+        parts.append(UIApplication.shared.applicationState == .active ? "Mantiza on screen" : "Mantiza in background")
+        parts.append(capture?.running == true ? "screen sharing on" : "SCREEN SHARING OFF")
+        return parts.joined(separator: ", ")
+    }
 
     /// The device's screen shows what Mantiza is doing (plain letters only: its font has no emoji).
     private func showOnDevice(_ text: String) {

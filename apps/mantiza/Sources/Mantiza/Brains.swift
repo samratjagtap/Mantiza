@@ -27,13 +27,30 @@ enum BrainError: LocalizedError {
     }
 }
 
-private func postJSON(_ url: URL, headers: [String: String], body: [String: Any], timeout: Double = 20) async throws -> [String: Any] {
+/// Network errors worth simply trying again (a dropped or slow connection).
+private func isNetworkHiccup(_ error: Error) -> Bool {
+    guard let e = error as? URLError else { return false }
+    return [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost,
+            .cannotFindHost, .dnsLookupFailed, .secureConnectionFailed].contains(e.code)
+}
+
+private func postJSON(_ url: URL, headers: [String: String], body: [String: Any], timeout: Double = 12,
+                      attempts: Int = 3) async throws -> [String: Any] {
     var req = URLRequest(url: url, timeoutInterval: timeout)
     req.httpMethod = "POST"
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
     for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
     req.httpBody = try JSONSerialization.data(withJSONObject: body)
-    let (data, response) = try await URLSession.shared.data(for: req)
+    var result: (Data, URLResponse)?
+    for attempt in 1...attempts {
+        do {
+            result = try await URLSession.shared.data(for: req)
+            break
+        } catch where isNetworkHiccup(error) && attempt < attempts {
+            try? await Task.sleep(for: .milliseconds(700 * attempt))
+        }
+    }
+    guard let (data, response) = result else { throw URLError(.timedOut) }
     let code = (response as? HTTPURLResponse)?.statusCode ?? 0
     guard code == 200 else { throw BrainError.http(code, String(decoding: data, as: UTF8.self)) }
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
