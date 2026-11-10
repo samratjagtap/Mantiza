@@ -16,6 +16,16 @@ Sources are numbered like [P1] and listed in section 15.
 
 **Scope decision (2026-10-29):** we build first and do **not** target the App Store for now. We write **our own code**, using existing open-source projects only as reference.
 
+**Scope decision (2026-11-10): a user's setup is only the Mantiza app, its widget and the StickS3, with Developer Mode OFF.**
+- **Never needed by users:** Developer Mode, sideloaded helper apps, XCUITest/WebDriverAgent runners, VPN or pairing-file tricks, developer disk images, or private APIs.
+- **Public iOS APIs only:** the app must be able to ship through TestFlight or the App Store. Developer Mode is used only on the developer's own phone, for xtool development installs.
+- **Rejected for this reason:** an on-device element-tree "Turbo mode" ([research](on-device-element-tree-research.md)).
+- **Where speed comes from instead:**
+  - direct iOS actions ([research](ios-direct-actions-research.md))
+  - record-once replay ([optics research](optics-framework-research.md))
+  - on-device OCR
+  - the StickS3's keys and absolute pointer
+
 **Scope decision (2026-10-30): English only for the first version.** Hindi and other languages come later (Phase 3 onwards). The Hindi parts of this plan (sections 6.2–6.5, tests T5–T7, T10 and T13) are kept as the plan **for later**, not for now.
 
 **AI decision (2026-10-30): two brains.** A fast decision model (**TypeSafe's Jev**) picks most taps; a frontier model (**Claude or Gemini**) understands, plans, writes text and handles hard steps (section 4.3). This must pass test T11 first.

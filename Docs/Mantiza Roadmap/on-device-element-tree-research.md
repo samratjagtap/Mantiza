@@ -1,5 +1,9 @@
 # Can Mantiza read other apps' buttons like Appium? (research, 2026-11-10)
 
+> **Decision (2026-11-10): rejected.** A user's setup is only the Mantiza app, its widget and the
+> StickS3, with Developer Mode off. Anything here that needs Developer Mode, sideloading or a
+> developer disk image won't be built. This page is kept as a record of why.
+
 **Short answer: yes, as an optional "Turbo mode" for phones in Developer Mode, using an on-device
 XCUITest runner. It can never be an App Store feature, and asking for consent doesn't change that:
 Apple only runs this kind of agent under developer conditions.**
