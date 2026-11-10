@@ -1,0 +1,10 @@
+version: 1
+bundleID: com.samratjagtap.Mantiza
+product: Mantiza
+infoPath: Info.plist
+iconPath: Resources/AppIcon.png
+entitlementsPath: Mantiza.entitlements
+extensions:
+  - product: MantizaWidget
+    infoPath: MantizaWidget-Info.plist
+    entitlementsPath: MantizaWidget.entitlements

@@ -16,6 +16,16 @@ Sources are numbered like [P1] and listed in section 15.
 
 **Scope decision (2026-10-29):** we build first and do **not** target the App Store for now. We write **our own code**, using existing open-source projects only as reference.
 
+**Scope decision (2026-11-10): a user's setup is only the Mantiza app, its widget and the StickS3, with Developer Mode OFF.**
+- **Never needed by users:** Developer Mode, sideloaded helper apps, XCUITest/WebDriverAgent runners, VPN or pairing-file tricks, developer disk images, or private APIs.
+- **Public iOS APIs only:** the app must be able to ship through TestFlight or the App Store. Developer Mode is used only on the developer's own phone, for xtool development installs.
+- **Rejected for this reason:** an on-device element-tree "Turbo mode" ([research](on-device-element-tree-research.md)).
+- **Where speed comes from instead:**
+  - direct iOS actions ([research](ios-direct-actions-research.md))
+  - record-once replay ([optics research](optics-framework-research.md))
+  - on-device OCR
+  - the StickS3's keys and absolute pointer
+
 **Scope decision (2026-10-30): English only for the first version.** Hindi and other languages come later (Phase 3 onwards). The Hindi parts of this plan (sections 6.2–6.5, tests T5–T7, T10 and T13) are kept as the plan **for later**, not for now.
 
 **AI decision (2026-10-30): two brains.** A fast decision model (**TypeSafe's Jev**) picks most taps; a frontier model (**Claude or Gemini**) understands, plans, writes text and handles hard steps (section 4.3). This must pass test T11 first.
@@ -441,13 +451,13 @@ Facts from M5Stack's documentation [P15]:
 | Rule | How |
 |---|---|
 | **Never touch sensitive apps** | Block list: banking, UPI and payment apps, password managers and authenticators, Wallet, Health, government ID. If the screen shows one of these (detected by app opened + OCR), stop |
-| **Ask before anything that cannot be undone** | Sending messages, posting, buying, deleting: approval on phone **and** device screen |
+| **Ask only about money and destruction** | Paying, buying, ordering, transferring money, deleting and posting publicly need approval. **Never ask about what the user explicitly requested:** a dictated message or a requested call is the task itself _(decided 2026-11-07)_ |
 | **Payments stay with the user** | Mantiza never types card numbers, PINs or OTPs; the user completes payment |
 | **Always stoppable** | Stop in app, Dynamic Island, device button, or shake |
 | **Screen data** | Screenshots go to the cloud model only with clear consent (disclosed by name: Anthropic or Google); send downsized frames; never capture blocked apps; never store full video, only selected step images (deletable) |
 | **Clipboard** | Expiring, local-only items [P14] |
 | **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval. Jev does not treat state as hostile by default [P32], so it only ever picks from our list |
-| **Risky items hidden from the picker** | Send, Delete, Buy, Pay, Post are left out of Jev's list unless the subtask allows them, and the app refuses such taps without approval _(idea, pattern from arc-cua [P36])_ |
+| **Risky taps checked** | Delete, Buy, Pay, Post: the app asks before tapping them unless the request itself asked for exactly that _(pattern from arc-cua [P36])_ |
 | **No blind retries** | Never repeat an action after an uncertain failure (e.g. Send), so nothing is sent or ordered twice _(pattern from mobile-jev [P35])_ |
 | **Literal text only** | The picker never invents text; message text comes only from the user's request via the big brain. Missing input → ask the user |
 | **AI providers disclosed** | Consent screen names every company that receives data: Anthropic or Google (screenshots), TypeSafe (on-screen text list) [P33] |
@@ -485,13 +495,15 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 |---|---|---|
 | T1 | M5StickS3 as Bluetooth mouse + keyboard with iPhone (iOS 27) | Pointer reaches any point accurately; English typing works **including capitals and symbols**; ⌘V works <br>**Result (2026-11-02): ✅ PASS.** All 8 tests worked on iPhone 14 Plus (iOS 27.2), including capitals, symbols, ⌘V and ⌘H. Pointer moves are repeatable, and it reconnects after a device restart and after iPhone lock/unlock ([results](../../firmware/t1-hid-test/README.md#results)) |
 | T1b | **Keyboard shortcuts and extra buttons** (section 4.4, items 7–8) | ⌘+Space opens Search and an app opens by name; Return sends in Messages; which Full Keyboard Access commands work and can be remapped; whether extra mouse buttons can be assigned to system actions<br>**Result (2026-11-03): mostly ✅.** ⌘+Space Search, Return to send, Tab and extra buttons 4–5 work. Fn/🌐 from our device is ignored, so Fn+H/C/N/↑ fail; remapping still to test ([results](../../firmware/t1-hid-test/README.md#t1b-results)) |
-| T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background |
-| T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock |
-| T4 | Picker behaviour | Does it ask every task, or can a session be reused? |
-| T8 | Claude vs Gemini (with Apple OCR text added) on 20 English tasks; Apple models as an optional comparison | Success rate, seconds per step, cost per task; pick the big brain |
+| T2 | App ↔ device command channel while iOS uses the device as a mouse | Commands arrive while the app is in the background<br>**Result (2026-11-05): ✅ PASS (main question).** The app gets the device from iOS's already-connected list while AssistiveTouch uses it. Ping avg 52 ms (max 94). Device-to-app asks answered 96/96, 53 with the app in the background, ~81 ms each. Typing and pointer moves from the app work. Locked phone ✅, and the app's own 5 s timer kept sending from the background ✅ ([results](../../firmware/t1-hid-test/README.md#t2-results)) |
+| T3 | ScreenCaptureKit with `screen-capture` background mode | Capture keeps running while another app is in front for 5+ minutes; record what happens on lock<br>**Result (2026-11-05): ✅ PASS.** Capture kept running for 5+ minutes with other apps in front, and the frames showed those apps. Bluetooth (T2 heartbeat) kept running alongside. **Locking the phone stops the capture** (iOS ends it). A red recording indicator shows while capturing ([results](../../apps/phase0-test/README.md#t3--t4-results)) |
+| T4 | Picker behaviour | Does it ask every task, or can a session be reused?<br>**Result (2026-11-05): the picker is needed for every new capture.** A stopped capture can't be restarted with the saved choice (start failed), and Start shows the picker again. **Design consequence:** start capture once and **keep it running** between tasks instead of starting per task; the picker is then needed only after a lock or a stop (about once per phone unlock).<br>**T4d (2026-11-06): ✅ the device presses the picker itself.** From the Home Screen with no touch: the device opens the app through Search, the app shows the picker, the device clicks "Share Entire Screen" ("shared ok 4.1s"). Pointer calibration: 1 count = 4.37 pt at the highest tracking speed, 0 pt error, when moving across then down in equal steps. **So the user never taps the picker** while the phone is unlocked ([results](../../apps/phase0-test/README.md#t3--t4-results)) |
+| T8 | **Big brain:** Gemini 3.8 Flash vs Claude Sonnet 5.5 vs GPT-6.1 Terra (thinking off per step) with Apple OCR text added, on 20 English tasks, called from India | Success rate, seconds per step, cost per task; pick the big brain. Candidates and reasons: [AI brain research (2026-11-06)](ai-brain-research.md)<br>**Result (2026-11-07): ✅ done.** On 82 tasks across 20 real screens, every big-brain model was 94–99% right. **Chosen: Gemini 3.5 Flash-Lite** (98%, 1.2 s, $0.0004 per call), through Google AI Studio directly ([brain bench](../../tools/brain-bench/README.md)) |
 | T9 | Device battery life with Bluetooth + screen | Hours of use and standby |
-| T11 | **Jev vs big brain** on ~20 real English app screens: Jev with the OCR-built list vs Claude/Gemini with the screenshot | Seconds per decision (measured from India), correct pick rate, how often icon-only buttons force a fallback. **Pass:** Jev about as accurate and clearly faster → keep two brains; otherwise big brain only |
+| T11 | **Fast brain: decision models** (Jev vs OpenAI Decisions API vs Cloudflare Clef, see [research](ai-brain-research.md)) vs big brain on ~20 real English app screens: Jev with the OCR-built list vs Claude/Gemini with the screenshot | Seconds per decision (measured from India), correct pick rate, how often icon-only buttons force a fallback. **Pass:** Jev about as accurate and clearly faster → keep two brains; otherwise big brain only<br>**Result (2026-11-07): ✅ done, two brains kept.** **Chosen: OpenAI GPT-6 Luna Decisions:** 0.43 s, and never wrong when at least 50% sure (71 of 82 steps). It works on the screenshot with numbered boxes around the text ([brain bench](../../tools/brain-bench/README.md)) |
 | T12 | **End-to-end timing** of the Azad task (section 4.4) | Real seconds for each stage, first run and learned run, logged per request |
+
+**Build route for the test apps (2026-11-05):** ✅ the T2/T3/T4 test app can be built on **Windows with [xtool](https://github.com/xtool-org/xtool)**, no Mac needed. A "Hello" app built, installed and ran on the iPhone ([setup](../Setup/windows-xtool-setup.md)). A Mac or cloud Mac is still needed for the widget (open xtool bugs) and for TestFlight/App Store.
 
 **Exit:** every test has a recorded result; design updated where something failed.
 
@@ -506,6 +518,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 | T13 | Jev and big brain on Hindi / Hinglish screens | Accuracy close to English, or Hindi steps go to the big brain only |
 
 ### Phase 1: Core agent, English (6 weeks)
+**Started 2026-11-07:** [apps/mantiza](../../apps/mantiza/README.md). First version: plan → open the app by keyboard → look (OCR + numbered boxes) → fast brain / big brain → device taps and types, with approval before risky taps.
 - App: English chat + voice, agent loop with two brains, OCR list, freshness check, wait-for-settle, fast path (Contacts, app links), safety gate, Live Activity.
 - Device firmware: Bluetooth mouse + keyboard, command channel, status screen, approve/cancel buttons, shake to stop.
 - **Exit:** 30 English tasks (including "reply to Azad that I'm coming") succeed at least 80% of the time on our phones; median time per step recorded.

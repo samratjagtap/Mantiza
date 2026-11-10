@@ -151,9 +151,46 @@ Date: **2026-11-03** · iPhone 14 Plus · iOS 27.2
 | – | Remapped command (e.g. `k ctrl+alt+h`) works | Not tested yet | |
 | – | T1 tests still work after the update | ✅ | |
 
+## T2: commands from the iPhone app
+Test **T2** from the [plan](../../Docs/Mantiza%20Roadmap/mantiza-v2-plan.md): can the Mantiza app send commands to the device **while iOS uses the same device as its mouse + keyboard**, even when the app is in the background?
+
+The firmware adds a private **command channel** (a second Bluetooth service). The test app [apps/phase0-test](../../apps/phase0-test/) writes the same text commands as the serial port (`m 200 0`, `t hello`, …) and the device answers (`pong 3`, `ask 5`, `ok …`).
+
+### Before you start
+1. **Pair again** (the device's Bluetooth layout changed): **Settings → Bluetooth → Mantiza T1 → ⓘ → Forget This Device**. Then **AssistiveTouch → Devices → Bluetooth Devices → Mantiza T2**.
+2. Install the **Mantiza Test** app (Claude builds it with xtool, [Windows setup](../../Docs/Setup/windows-xtool-setup.md)). Allow **Bluetooth** when it asks.
+
+### The tests
+| # | Where | Do | Pass |
+|---|---|---|---|
+| T2a | App | Check **Device: Ready ✅** and **Found by**, then tap **Ping ×10** | All 10 come back; note avg and max ms |
+| T2b | App | **Move pointer in a square**. Tap the text box, then **Type "Hello from the app"** | Pointer moves; the text appears in the box |
+| T2c | StickS3 | Pick **2 Auto ask 5s**, press front. Leave the app (Home Screen, use other apps) for **5 minutes**. Then lock the phone for 1 minute | Bottom line **A answered/sent** keeps rising with the app in the background. Note what happens while locked |
+| T2d | App | **Start heartbeat**, then leave the app for 1 minute | The device's **B** number: does it keep rising, or stop? (Stopping is expected: an app can't run its own timer in the background. Mantiza would rely on T2c-style asks, or on screen capture keeping it awake, T3) |
+
+On the device: **App:on** (top right) = the app is listening. Bottom line: `A answered/sent last-ms  B beats`.
+
+### T2 results
+Date: **2026-11-05** · iPhone 14 Plus · iOS 27.0.1 (as reported over USB)
+
+**Overall: PASS on the main question.** The app finds the device among the devices iOS is already connected to, while AssistiveTouch uses it as the mouse, and commands work in both directions, including with the app in the background.
+
+| # | Test | Result | Notes |
+|---|---|---|---|
+| T2a | Found by / Ready | ✅ | Found by: **Already connected (Mantiza service)** |
+| T2a | Ping ×10 | ✅ | 10/10, avg **52 ms**, max **94 ms** |
+| T2b | Pointer square from the app | ✅ | |
+| T2b | Typing from the app | ✅ | Text appeared in the app's box |
+| T2c | Asks answered in the background | ✅ | Device **A 96/96**, 53 answered with the app in the background, last answer **81 ms** |
+| T2c | While locked | ✅ | Counts kept matching |
+| T2d | App heartbeat in the background | ✅ | Retested with auto-ask off: device **B** matched the app's beats ("everything matches") |
+| – | Mouse still works normally with the app linked | ✅ | |
+
 ## Troubleshooting
 | Problem | Try |
 |---|---|
+| App says "Command channel not found" | The iPhone remembers the old layout: Forget **Mantiza T1/T2** in Bluetooth settings, pair again, then tap **Connect again** |
+| App stays "Not connected" / "Scanning…" | Check the device shows **Connected** (paired as mouse first), then tap **Connect again** |
 | "Mantiza T1" not in the Bluetooth Devices list | Single-click the side power button to restart the StickS3; make sure the screen says "Waiting..." |
 | Paired before but now won't connect | iPhone: Settings → Bluetooth → Mantiza T1 → **Forget This Device**, then pair again (Part C) |
 | Connected, but no pointer | Check AssistiveTouch is **On** |
@@ -162,5 +199,4 @@ Date: **2026-11-03** · iPhone 14 Plus · iOS 27.2
 | Blank screen after a successful upload | The StickS3 is still in download mode. Unplug USB, **power it fully off** (long-press the side button), then turn it on again |
 
 ## Not in this test (later)
-- Commands from the Mantiza iPhone app over Bluetooth (test **T2**).
 - Absolute ("go to this exact point") pointer mode.

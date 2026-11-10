@@ -13,7 +13,7 @@ This repo currently holds the planning docs. Mantiza uses Google's [Artemis](htt
 | Tech stack | [tech-stack.md](Docs/Mantiza%20Roadmap/tech-stack.md) | [tech-stack.md](Docs/Google%20Artemis%20Analysis/tech-stack.md) |
 | Roadmap and phases | [roadmap.md](Docs/Mantiza%20Roadmap/roadmap.md) | [roadmap.md](Docs/Google%20Artemis%20Analysis/roadmap.md) |
 
-Setting up a Mac to build the iPhone app? Follow [MacBook setup](Docs/Setup/macbook-setup.md).
+Building the iPhone app: on **Windows** follow [Windows setup with xtool](Docs/Setup/windows-xtool-setup.md) (works today, no Mac needed); on a **Mac** follow [MacBook setup](Docs/Setup/macbook-setup.md) (needed later for the widget and TestFlight).
 
 New here? Start with the [Mantiza plan](Docs/Mantiza%20Roadmap/plan.md). Unfamiliar terms are explained in the [glossary](Docs/Mantiza%20Roadmap/glossary.md).
 
