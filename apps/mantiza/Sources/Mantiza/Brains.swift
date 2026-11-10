@@ -194,11 +194,13 @@ final class BigBrain {
         let json = try await postJSON(url, headers: ["x-goog-api-key": Keys.gemini], body: body)
         let parts = (((json["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])?["parts"] as? [[String: Any]]) ?? []
         let text = parts.filter { ($0["thought"] as? Bool) != true }.compactMap { $0["text"] as? String }.joined()
-        guard let data = text.data(using: .utf8),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+        guard let data = text.data(using: .utf8), let parsed = try? JSONSerialization.jsonObject(with: data) else {
             throw BrainError.badAnswer(text)
         }
-        return obj
+        // Sometimes the object comes wrapped in a list: [ {...} ] (debug runs 2026-11-10_114800, _114810).
+        if let obj = parsed as? [String: Any] { return obj }
+        if let list = parsed as? [Any], let obj = list.first as? [String: Any] { return obj }
+        throw BrainError.badAnswer(text)
     }
 
     /// Turns the user's request into plan steps (text only, once per task). Direct iOS actions
