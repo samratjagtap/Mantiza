@@ -41,12 +41,13 @@ struct PlanStep: Codable {
     var state: String?
     var state_value: Bool?
     var business: Bool?               // WhatsApp Business instead of WhatsApp (only when the user says so)
+    var question: String?             // screen steps: what to find out from the final screen
     var routine: String?              // the kind of screen task, for record-once replay
     var values: [String: String]?     // this task's values for the routine's {blanks}
 
     var subtask: Subtask {
         Subtask(app: app, goal: goal ?? "", text: text, success_text: success_text, needs_approval: needs_approval,
-                max_steps: max_steps, state: state, state_value: state_value)
+                max_steps: max_steps, state: state, state_value: state_value, question: question)
     }
 
     /// Short description for the log.
@@ -308,6 +309,23 @@ enum Direct {
         }
         // Unified Maps URLs, iOS 18.4+ (Apple docs)
         return URL(string: "https://maps.apple.com/directions?destination=\(encode(place))&mode=\(m)")
+    }
+
+    /// Apps' own links, to open them directly (no Search). Lowercased names without spaces.
+    private static let appLinks: [String: String] = [
+        "instagram": "instagram://", "whatsapp": "whatsapp://", "whatsappbusiness": "whatsapp-business://",
+        "youtube": "youtube://", "spotify": "spotify://", "facebook": "fb://", "messenger": "fb-messenger://",
+        "snapchat": "snapchat://", "telegram": "tg://", "linkedin": "linkedin://", "x": "twitter://", "twitter": "twitter://",
+        "threads": "barcelona://", "pinterest": "pinterest://", "reddit": "reddit://", "netflix": "nflx://",
+        "gmail": "googlegmail://", "googlemaps": "comgooglemaps://", "chrome": "googlechrome://", "uber": "uber://",
+        "paytm": "paytmmp://", "phonepe": "phonepe://", "googlepay": "gpay://", "zoom": "zoomus://",
+        "notes": "mobilenotes://", "music": "music://", "maps": "maps://", "photos": "photos-redirect://",
+        "calendar": "calshow://", "reminders": "x-apple-reminderapp://", "shortcuts": "shortcuts://",
+        "files": "shareddocuments://", "podcasts": "podcasts://", "appstore": "itms-apps://", "mail": "message://",
+    ]
+
+    static func appLink(_ app: String) -> URL? {
+        appLinks[app.lowercased().filter { !$0.isWhitespace }].flatMap(URL.init(string:))
     }
 
     /// Opens a link in its app. Works only while Mantiza is on screen.

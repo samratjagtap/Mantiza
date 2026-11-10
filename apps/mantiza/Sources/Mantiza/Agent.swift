@@ -34,6 +34,8 @@ final class Agent: ObservableObject {
     private let big = BigBrain()
     private var stopRequested = false
     private var taskStart = Date()
+    private var answers: [String] = []      // what the task found out, for the final message
+    private var screenVerified = false      // the last screen run ended on a confirmed result
     // Recording of the current AI screen run (becomes a routine when it succeeds)
     private var recording: [RoutineStep] = []
     private var recValues: [String: String] = [:]
@@ -90,6 +92,7 @@ final class Agent: ObservableObject {
             RunLog.shared.finish(result: status, deviceLog: link.log)
         }
         taskStart = Date()
+        answers = []
 
         guard link.ready else { end("❌ Device not connected (Device tab)"); return }
         guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
@@ -118,7 +121,7 @@ final class Agent: ObservableObject {
                 return
             }
         }
-        end("✅ Done in " + seconds(since: taskStart) + (plan.reply.map { " · " + $0 } ?? ""))
+        end("✅ Done in " + seconds(since: taskStart) + " · " + (answers.isEmpty ? (plan.reply ?? "") : answers.joined(separator: " ")))
     }
 
     /// One plan step. Direct routes first; the screen loop when iOS has no direct way, or as the
@@ -131,7 +134,9 @@ final class Agent: ObservableObject {
             return true
 
         case "screen":
-            return await doScreen(step.subtask, routine: step.routine, values: step.values ?? [:])
+            guard await doScreen(step.subtask, routine: step.routine, values: step.values ?? [:]) else { return false }
+            if let q = step.question, !q.isEmpty { await answerFromScreen(q) }
+            return true
 
         case "open_app":
             guard let app = step.app else { end("❌ Which app?"); return false }
@@ -318,6 +323,29 @@ final class Agent: ObservableObject {
                               openApp: false, typedAlready: true)
     }
 
+    /// Reads the final screen and answers the user's question about it ("Has cici posted a story?").
+    private func answerFromScreen(_ question: String) async {
+        guard let capture else { return }
+        status = "Reading the answer…"
+        await capture.waitForSettle(quiet: 0.4, maxWait: 2.5)
+        guard let frame = capture.latestImage(), let image = Marks.plain(frame) else { return }
+        do {
+            let a = try await big.answer(image: image, question: question)
+            answers.append(a)
+            add("💬 " + a, image: UIImage(data: image))
+        } catch {
+            add("Couldn't read the answer from the screen (\(error.localizedDescription.prefix(60)))")
+        }
+    }
+
+    /// Tasks that turn something on or off, where a second tap would undo the first.
+    private func isSwitchTask(_ task: Subtask) -> Bool {
+        if task.state != nil { return true }
+        let g = task.goal.lowercased()
+        return ["turn on", "turn off", "switch on", "switch off", "enable", "disable", "toggle", " is on", " is off"]
+            .contains { g.contains($0) }
+    }
+
     private func appName(_ kind: String) -> String {
         ["call": "Phone", "whatsapp": "WhatsApp", "sms": "Messages", "email": "Mail"][kind] ?? kind
     }
@@ -347,19 +375,59 @@ final class Agent: ObservableObject {
         try? await Task.sleep(for: .milliseconds(700))
     }
 
-    /// Opens an app by name through Search, from the Home Screen.
+    /// Opens an app by name: its own link when Mantiza is on screen (instant and exact), otherwise
+    /// Search from the Home Screen, then a check that the app really opened (debug runs
+    /// 2026-11-10_112947 and _113142: Search left the phone on the Home Screen and nothing noticed).
     private func open(app: String) async {
         guard let link else { return }
         status = "Opening \(app)…"
         let t = Date()
-        await goHome()
-        await link.run("k cmd+space")
-        try? await Task.sleep(for: .milliseconds(700))
-        await link.run("t \(ascii(app))")
-        try? await Task.sleep(for: .milliseconds(600))
-        await link.run("k enter")
-        try? await Task.sleep(for: .milliseconds(800))
-        add("Opened \(app) (\(seconds(since: t)))")
+        if UIApplication.shared.applicationState == .active, let url = Direct.appLink(app), await Direct.open(url) {
+            try? await Task.sleep(for: .milliseconds(1200))
+            add("Opened \(app) (\(seconds(since: t)), app link)")
+            return
+        }
+        for attempt in 1...2 {
+            await goHome()
+            await link.run("k cmd+space")
+            try? await Task.sleep(for: .milliseconds(attempt == 1 ? 800 : 1300))
+            await link.run("t \(ascii(app))")
+            try? await Task.sleep(for: .milliseconds(attempt == 1 ? 700 : 1200))
+            await link.run("k enter")
+            try? await Task.sleep(for: .milliseconds(900))
+            switch await stillOutside(app) {
+            case .opened:
+                add("Opened \(app) (\(seconds(since: t)))")
+                return
+            case .tapped:
+                add("Opened \(app) by tapping its name (Search didn't open it) (\(seconds(since: t)))")
+                return
+            case .no:
+                add("\(app) didn't open (attempt \(attempt))")
+            }
+        }
+    }
+
+    private enum OpenCheck { case opened, tapped, no }
+
+    /// After Search + Enter: if Search's results or the Home Screen still show, tap the app's name.
+    private func stillOutside(_ app: String) async -> OpenCheck {
+        guard let capture, let pointer else { return .opened }
+        await capture.waitForSettle(quiet: 0.4, maxWait: 2.5)
+        guard let frame = capture.latestImage() else { return .opened }
+        let items = await ScreenReader.read(frame)
+        let words = Set(items.map { Words.norm($0.text) })
+        let outside = words.contains("apps") || words.contains("show more") || words.contains("search")
+            || words.contains("search in app")
+        guard outside else { return .opened }
+        let want = Words.norm(app)
+        guard let item = items.first(where: { Words.norm($0.text) == want }) else { return .no }
+        guard await pointer.tap(toScreen(item.center, frame: frame)) else { return .no }
+        try? await Task.sleep(for: .milliseconds(1500))
+        await capture.waitForSettle(quiet: 0.4, maxWait: 2.5)
+        guard let after = capture.latestImage() else { return .tapped }
+        let now = Set(await ScreenReader.read(after).map { Words.norm($0.text) })
+        return now.contains("apps") || now.contains("show more") ? .no : .tapped
     }
 
     /// Screen sharing (Mantiza's eyes). The picker shows inside Mantiza, so it comes forward first.
@@ -425,13 +493,14 @@ final class Agent: ObservableObject {
                 recValues = vals
                 let typed = typedAlready || kept.contains { $0.kind == .type }
                 let ok = await runScreen(task, openApp: false, typedAlready: typed)
-                if ok { learn(name, app: task.app, steps: kept + (await finishRecording()), updated: true) }
+                if ok && screenVerified { learn(name, app: task.app, steps: kept + (await finishRecording()), updated: true) }
                 return ok
             }
         }
         recValues = vals
         let ok = await runScreen(task, openApp: openApp, typedAlready: typedAlready)
-        if ok, let name { learn(name, app: task.app, steps: await finishRecording(), updated: false) }
+        if ok, screenVerified, let name { learn(name, app: task.app, steps: await finishRecording(), updated: false) }
+        if ok, !screenVerified, name != nil { add("Not learned: the result wasn't confirmed") }
         return ok
     }
 
@@ -665,10 +734,11 @@ final class Agent: ObservableObject {
         var lastScreen = ""  // the text on screen before the last tap
         let maxSteps = min(max(task.max_steps ?? 10, 4), 20)
 
+        screenVerified = true
         for n in 1...maxSteps {
             if stopRequested { end("⏹ Stopped"); return false }
             status = "Step \(n): looking…"
-            await capture.waitForSettle()
+            await capture.waitForSettle(quiet: 0.4, maxWait: 2.5)  // animated apps never settle fully
 
             // Exact check straight from iOS, where it can tell (flashlight, Low Power Mode, Dark Mode)
             if let name = task.state, let want = task.state_value, let now = PhoneState.read(name), now == want {
@@ -721,7 +791,7 @@ final class Agent: ObservableObject {
             }
             let action = answers["action"] ?? Choice(value: "icon", confidence: 0)
             let target = answers["target"]
-            let decideTime = seconds(since: t)
+            let decideTime = seconds(since: t) + " [\(Net.lastCall)]"
             let shot = UIImage(data: marked)
 
             let textPending = task.text != nil && !typed  // never "done" before the text is typed
@@ -800,7 +870,7 @@ final class Agent: ObservableObject {
                     let p = try await big.locate(image: plain, goal: task.goal, history: history)
                     point = CGPoint(x: p.x * Double(frame.width), y: p.y * Double(frame.height))
                     label = p.what
-                    add("Step \(n): big brain → \"\(p.what)\" (\(seconds(since: t))); fast brain said \(action.value) \(String(format: "%.0f%%", action.confidence * 100))")
+                    add("Step \(n): big brain → \"\(p.what)\" (\(seconds(since: t)) [\(Net.lastCall)]); fast brain said \(action.value) \(String(format: "%.0f%%", action.confidence * 100))")
                 } catch {
                     // A dropped connection or a pause by iOS: wait a moment and look again.
                     brainFails += 1
@@ -824,8 +894,15 @@ final class Agent: ObservableObject {
             // changed the screen, it most likely worked.
             if !unchanged, !lastLabel.isEmpty, label.lowercased() == lastLabel.lowercased() {
                 add("Step \(n): \"\(label)\" was just tapped; not tapping it again", image: shot)
-                add("Probably done (not checked: iOS doesn't report this setting)")
-                return true
+                if isSwitchTask(task) {
+                    add("Probably done (not checked: iOS doesn't report this setting)")
+                    screenVerified = false
+                    return true
+                }
+                // Not a switch (debug run 2026-11-10_113142 tapped "Back" twice and called it done).
+                history.append("\"\(label)\" was just tapped and must not be tapped again: choose something else")
+                lastLabel = ""
+                continue
             }
 
             // Don't keep tapping the same spot if nothing happens
