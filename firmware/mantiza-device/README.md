@@ -10,6 +10,12 @@ This is the firmware for the real Mantiza app ([apps/mantiza](../../apps/mantiza
 - **Fallback:** setting `-DABSOLUTE_POINTER=0` in `platformio.ini` builds the old relative mouse.
 - **The device is now called "Mantiza"**, and `hello` answers `hi Mantiza battery N% abs 1`, so the app knows which pointer it has.
 - **No test menu.** The screen shows only what matters: iPhone connected, app ready, battery, and **what Mantiza is doing right now** (the app sends `status <text>` at every step). The screen turns off after a minute without news.
+- **Mantiza's look on the screen** (same colours and pixel art as the app, from `images/`):
+  - the pixel mantis head and the MANTIZA wordmark
+  - an IPHONE light (LINKED / WAITING) and an APP light (READY / NOT OPEN)
+  - battery, and what Mantiza is doing
+  - the head blinks now and then, a scan line runs through it during a task, and it is dim until the iPhone connects
+  - while a task runs, a magenta bar says FRONT BUTTON = STOP
 - **Front button = Stop** while a task runs (the app sends `task on` / `task off`; the device sends `stop`).
 - **Special keys** (`key <name> [times]`): the keys Apple lists for keyboards in its Accessory Design Guidelines (R32 Update 1, Tables 14-3 and 14-4): `home`, `lock`, `screenshot`, `brighter`, `dimmer`, `louder`, `softer`, `mute`, `playpause`, `next`, `previous`, `siri`, `spotlight`, `globe`, `keyboard`, and `focus` (Do Not Disturb). `key 0x00e9` sends any consumer usage. jinwon-int/esp32-iphone-agent sends some of the same keys over BLE.
 
