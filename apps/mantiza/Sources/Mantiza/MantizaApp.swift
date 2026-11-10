@@ -19,6 +19,7 @@ struct MantizaApp: App {
             .environmentObject(pointer)
             .environmentObject(agent)
             .environmentObject(agent.approvals)
+            .environmentObject(agent.routines)
             .onAppear {
                 capture.link = link
                 pointer.link = link

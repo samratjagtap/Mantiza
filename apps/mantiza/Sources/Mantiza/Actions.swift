@@ -40,6 +40,8 @@ struct PlanStep: Codable {
     var max_steps: Int?
     var state: String?
     var state_value: Bool?
+    var routine: String?              // the kind of screen task, for record-once replay
+    var values: [String: String]?     // this task's values for the routine's {blanks}
 
     var subtask: Subtask {
         Subtask(app: app, goal: goal ?? "", text: text, success_text: success_text, needs_approval: needs_approval,

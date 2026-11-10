@@ -76,6 +76,7 @@ struct DeviceView: View {
     @EnvironmentObject var link: DeviceLink
     @EnvironmentObject var capture: ScreenCapture
     @EnvironmentObject var pointer: Pointer
+    @EnvironmentObject var routines: RoutineStore
 
     var body: some View {
         NavigationStack {
@@ -109,6 +110,25 @@ struct DeviceView: View {
                     Button("Stop", role: .destructive) { capture.stop() }.disabled(!capture.running)
                 } header: { Text("3 · Eyes") } footer: {
                     Text("Sharing stays on between tasks. Locking the phone turns it off; the next task turns it on again by itself.")
+                }
+
+                Section {
+                    if routines.all.isEmpty {
+                        Text("None yet. Each screen task the AI finishes is learned here.")
+                    }
+                    ForEach(routines.all.sorted { $0.learned > $1.learned }) { r in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.name)
+                            Text("\(r.steps.count) step\(r.steps.count == 1 ? "" : "s") · replayed \(r.replays)× without AI")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        .swipeActions { Button("Forget", role: .destructive) { routines.delete(r.name) } }
+                    }
+                    if !routines.all.isEmpty {
+                        Button("Forget all", role: .destructive) { routines.deleteAll() }
+                    }
+                } header: { Text("Learned routines") } footer: {
+                    Text("Done once by the AI, then replayed by reading the screen only. Swipe left to forget one that went wrong.")
                 }
 
                 Section("Brains") {
