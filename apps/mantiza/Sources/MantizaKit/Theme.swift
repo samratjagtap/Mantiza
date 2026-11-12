@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Mantiza's look (from images/: o1-gridded, o6-lockup, pixel-sheet): near-black ink, magenta and
-/// neon green pixels, square corners, thin lines, monospaced type.
+/// neon green used sparingly (magenta = the main action, green = connected/done), quiet grey text,
+/// soft cards, and the pixel head as the one decorative element.
 public enum Theme {
     public static let ink = Color(hex: 0x0D0A12)       // background (the logos' background)
     public static let panel = Color(hex: 0x14101A)     // a step lighter, for panels
@@ -11,8 +12,13 @@ public enum Theme {
     public static let text = Color(hex: 0xEEEAF4)
     public static let dim = Color(hex: 0x8A8394)
 
-    /// Corners stay sharp, like the pixels.
-    public static let corner: CGFloat = 2
+    public static let raised = Color(hex: 0x1C1724)    // pressed rows, the send field
+    public static let corner: CGFloat = 14
+
+    /// Clean system type for reading; monospaced only for small labels, times and the log.
+    public static func sans(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight)
+    }
 
     public static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
