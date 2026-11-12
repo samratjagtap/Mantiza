@@ -141,9 +141,13 @@ final class DeviceLink: NSObject, ObservableObject {
         }
         note("The device didn't answer hello: reopening the command channel")
         refresh()
-        for _ in 0..<30 {
+        // Once the channel is back, ask again (debug run 2026-11-10_193720: the channel came back
+        // in 0.1 s, but no hello went out after it and the task gave up).
+        var asked = false
+        for _ in 0..<40 {
             try? await Task.sleep(for: .milliseconds(100))
             if absolute != nil { return true }
+            if ready && !asked { send("hello"); asked = true }
         }
         return false
     }

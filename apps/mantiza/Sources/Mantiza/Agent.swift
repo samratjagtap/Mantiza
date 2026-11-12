@@ -41,6 +41,8 @@ final class Agent: ObservableObject {
     // Recording of the current AI screen run (becomes a routine when it succeeds)
     private var recording: [RoutineStep] = []
     private var recValues: [String: String] = [:]
+    private var justOpened: String?   // the app the last plan step opened
+    private var alreadyOpen: String?  // the screen step's app is already open: don't open it again
     private var recOpen = false
 
     /// Confidence the fast brain needs to act alone (the bench: never wrong at ≥ 0.5).
@@ -99,6 +101,11 @@ final class Agent: ObservableObject {
         taskStart = Date()
         answers = []
 
+        if !link.ready {  // a dropped link often comes back at once (debug run 2026-11-10_193746)
+            status = "Connecting to the device…"
+            link.connect()
+            for _ in 0..<40 where !link.ready { try? await Task.sleep(for: .milliseconds(100)) }
+        }
         guard link.ready else { end("❌ Device not connected (Device tab)"); return }
         guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
         guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
@@ -133,19 +140,26 @@ final class Agent: ObservableObject {
     /// fallback when a direct route doesn't work.
     private func perform(_ step: PlanStep) async -> Bool {
         guard let link else { return false }
+        let opened = justOpened
+        justOpened = nil
         switch step.action {
         case "answer":
             add("💬 " + (step.text ?? ""))
             return true
 
         case "screen":
+            // The step before just opened this app: use it as it is, don't open it again (debug runs
+            // 2026-11-10_123448 and _123705: the second open went through Search and left the phone
+            // on the Home Screen).
+            if let opened, let app = step.app, Words.norm(opened) == Words.norm(app) { alreadyOpen = app }
             guard await doScreen(step.subtask, routine: step.routine, values: step.values ?? [:]) else { return false }
             if let q = step.question, !q.isEmpty { await answerFromScreen(q) }
             return true
 
         case "open_app":
             guard let app = step.app else { end("❌ Which app?"); return false }
-            await open(app: app)
+            guard await open(app: app) else { return false }
+            justOpened = app
             return true
 
         case "key":
@@ -383,14 +397,15 @@ final class Agent: ObservableObject {
     /// Opens an app by name: its own link when Mantiza is on screen (instant and exact), otherwise
     /// Search from the Home Screen, then a check that the app really opened (debug runs
     /// 2026-11-10_112947 and _113142: Search left the phone on the Home Screen and nothing noticed).
-    private func open(app: String) async {
-        guard let link else { return }
+    @discardableResult
+    private func open(app: String) async -> Bool {
+        guard let link else { return false }
         status = "Opening \(app)…"
         let t = Date()
         if UIApplication.shared.applicationState == .active, let url = Direct.appLink(app), await Direct.open(url) {
             try? await Task.sleep(for: .milliseconds(1200))
             add("Opened \(app) (\(seconds(since: t)), app link)")
-            return
+            return true
         }
         for attempt in 1...2 {
             await goHome()
@@ -403,14 +418,18 @@ final class Agent: ObservableObject {
             switch await stillOutside(app) {
             case .opened:
                 add("Opened \(app) (\(seconds(since: t)))")
-                return
+                return true
             case .tapped:
                 add("Opened \(app) by tapping its name (Search didn't open it) (\(seconds(since: t)))")
-                return
+                return true
             case .no:
                 add("\(app) didn't open (attempt \(attempt))")
             }
         }
+        // Debug run 2026-11-10_123705: GregMat was offloaded (a cloud next to its name), so it
+        // couldn't open, and the AI wandered around Search instead.
+        end("❌ \(app) didn't open. Is it installed? An offloaded app shows a cloud next to its name: tap it once to download it again")
+        return false
     }
 
     private enum OpenCheck { case opened, tapped, no }
@@ -422,8 +441,9 @@ final class Agent: ObservableObject {
         guard let frame = capture.latestImage() else { return .opened }
         let items = await ScreenReader.read(frame)
         let words = Set(items.map { Words.norm($0.text) })
+        // The Home Screen's search pill reads "Q Search" (debug run 2026-11-10_123448).
         let outside = words.contains("apps") || words.contains("show more") || words.contains("search")
-            || words.contains("search in app")
+            || words.contains("search in app") || words.contains("q search")
         guard outside else { return .opened }
         let want = Words.norm(app)
         guard let item = items.first(where: { Words.norm($0.text) == want }) else { return .no }
@@ -561,8 +581,9 @@ final class Agent: ObservableObject {
     }
 
     /// Opens the task's app the same way for the AI and for replays.
-    private func openFor(_ task: Subtask) async {
-        guard let link, let app = task.app else { return }
+    private func openFor(_ task: Subtask) async -> Bool {
+        guard let link, let app = task.app else { return true }
+        defer { alreadyOpen = nil }
         if app.lowercased().replacingOccurrences(of: " ", with: "").hasPrefix("controlcent") {
             status = "Going to the Home Screen…"
             await goHome()
@@ -571,9 +592,13 @@ final class Agent: ObservableObject {
             await link.run("drag 30800 0 30800 14750")
             try? await Task.sleep(for: .milliseconds(900))
             add("Opened Control Centre (swipe down from the top-right)")
+        } else if let already = alreadyOpen, Words.norm(already) == Words.norm(app),
+                  UIApplication.shared.applicationState != .active {  // not if Mantiza came forward to share
+            add("\(app) is already open")
         } else {
-            await open(app: app)
+            return await open(app: app)
         }
+        return true
     }
 
     /// Apps reopen where the user left them (a story, someone's profile). Routines start from the
@@ -581,8 +606,8 @@ final class Agent: ObservableObject {
     /// then a swipe from the left edge goes back one screen, checking the words after each.
     private func backToStart(_ app: String, start words: [String], skip: [String]) async -> Bool {
         guard let link, !words.isEmpty else { return true }
-        for attempt in 0...4 {
-            let seen = await look(skip: skip)
+        for attempt in 0...3 {
+            let seen = await look(skip: skip, maxWait: 1.5)  // feeds and videos never settle
             if Words.match(words, seen.words) >= 0.5 {
                 if attempt > 0 { add("Back at \(app)'s start screen (\(attempt) step\(attempt == 1 ? "" : "s") back, no AI)") }
                 return true
@@ -611,9 +636,9 @@ final class Agent: ObservableObject {
         var words: [String]
     }
 
-    private func look(skip: [String]) async -> Seen {
+    private func look(skip: [String], maxWait: Double = 3) async -> Seen {
         guard let capture else { return Seen(frame: nil, items: [], words: []) }
-        await capture.waitForSettle(quiet: 0.35, maxWait: 3)
+        await capture.waitForSettle(quiet: 0.35, maxWait: maxWait)
         guard let frame = capture.latestImage() else { return Seen(frame: nil, items: [], words: []) }
         let items = await ScreenReader.read(frame)
         return Seen(frame: frame, items: items, words: Words.screenWords(items, excluding: skip))
@@ -658,10 +683,14 @@ final class Agent: ObservableObject {
         if !capture.running { guard await startEyes() else { return .failed } }
         add("Replaying \"\(r.name)\": \(r.steps.count) learned step\(r.steps.count == 1 ? "" : "s"), no AI")
         let start = Date()
-        if openApp { await openFor(task) }
+        if openApp { guard await openFor(task) else { return .failed } }
         let skip = values.values.map(Words.norm)
-        if openApp, let app = task.app, let first = r.steps.first {
-            _ = await backToStart(app, start: first.before, skip: skip)
+        if openApp, let app = task.app, let first = r.steps.first,
+           !(await backToStart(app, start: first.before, skip: skip)) {
+            // Not on the learned start screen (e.g. another tab): the AI goes on from here at once
+            // (debug run 2026-11-10_193835 spent 18 s re-checking the wrong screen).
+            add("Replay can't start from this screen → AI takes over")
+            return .handOver([])
         }
         var i = 0
         while i < r.steps.count {
@@ -751,7 +780,7 @@ final class Agent: ObservableObject {
         // 3. Start from the Home Screen (never inside Mantiza itself), then open the app:
         //    Control Centre with a swipe down from the top-right corner, like a finger; any other
         //    app with Search (no AI needed, nothing for the user to set up).
-        if openApp { await openFor(task) }
+        if openApp { guard await openFor(task) else { return false } }
         if openApp, let app = task.app, let start = routines.startWords(app: app) {
             _ = await backToStart(app, start: start, skip: recValues.values.map(Words.norm))
         }
@@ -771,6 +800,16 @@ final class Agent: ObservableObject {
         screenVerified = true
         for n in 1...maxSteps {
             if stopRequested { end("⏹ Stopped"); return false }
+            // Mantiza itself is on screen (the user opened it, e.g. to press Stop): never act on
+            // Mantiza's own screen (debug run 2026-11-10_193835: the AI tapped Mantiza's Device tab).
+            if UIApplication.shared.applicationState == .active {
+                status = "Paused while Mantiza is open: go back to \(task.app ?? "the app") or press Stop"
+                while UIApplication.shared.applicationState == .active && !stopRequested {
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                if stopRequested { end("⏹ Stopped"); return false }
+                try? await Task.sleep(for: .milliseconds(600))
+            }
             status = "Step \(n): looking…"
             await capture.waitForSettle(quiet: 0.4, maxWait: 2.5)  // animated apps never settle fully
 

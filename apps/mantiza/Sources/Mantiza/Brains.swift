@@ -258,6 +258,9 @@ final class BigBrain {
                If a KNOWN ROUTINE below is the same kind of task, copy its name exactly. Reuse one only if it does the
                WHOLE step; if it does only the first part (e.g. opening someone's profile), make that its own screen step
                with the known name, and put the rest in a following screen step.
+               "Same kind" means the same action on the same kind of thing: "watch stories" (other people's) is NOT
+               "open my story", "play liked songs" is NOT "play a playlist". When unsure, give a new name.
+               A screen step opens its own app: don't put an open_app step for the same app before it.
           values: {"person": "...", ...}: the specific values for the routine's blanks ("text" is filled in automatically).
         KNOWN ROUTINES (learned before; reusing one makes the task fast): \(known.isEmpty ? "none" : known.map { "\"\($0)\"" }.joined(separator: ", "))
 
