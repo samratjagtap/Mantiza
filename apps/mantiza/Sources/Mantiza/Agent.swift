@@ -43,6 +43,7 @@ final class Agent: ObservableObject {
     private var recValues: [String: String] = [:]
     private var justOpened: String?   // the app the last plan step opened
     private var alreadyOpen: String?  // the screen step's app is already open: don't open it again
+    private var wantAmPm: String?     // an alarm being added in Clock: "AM" or "PM"
     private var recOpen = false
 
     /// Confidence the fast brain needs to act alone (the bench: never wrong at ≥ 0.5).
@@ -198,14 +199,17 @@ final class Agent: ObservableObject {
             guard let time = step.time, let clock = Agent.clockTime(time) else { end("❌ What time?"); return false }
             let days = step.days ?? []
             let repeatText = days.isEmpty ? "No repeat (it rings once)."
-                : "Repeat on " + days.map(\.capitalized).joined(separator: ", ") + " (in Repeat, tick \"Every <day>\" for each of these days, then go back)."
+                : "Repeat on " + days.map(\.capitalized).joined(separator: ", ")
+                  + ": under Repeat, tap the day circles (S M T W T F S, Sunday first) for these days so they are highlighted."
             let label = step.text.map { " Label: \"\($0)\"." } ?? ""
             let task = Subtask(app: "Clock",
                                goal: "Add a NEW alarm in the Clock app: open the Alarms tab, tap +. Set the time to \(clock.shown): "
-                                   + "tap the time wheels once and type \(clock.digits) on the keyboard (a Bluetooth keyboard is connected), "
-                                   + "then make sure it says \(clock.ampm). \(repeatText)\(label) Then tap Save. "
-                                   + "Done only when the Alarms list shows \(clock.short) with its switch on. Never change or delete any other alarm.",
+                                   + "tap the time wheels once and type \(clock.digits) on the keyboard (a Bluetooth keyboard is connected); "
+                                   + "Mantiza sets \(clock.ampm) itself. \(repeatText)\(label) Then tap the check mark (top right) to save. "
+                                   + "Done only when the Alarms list shows \(clock.short). Never change or delete any other alarm.",
                                text: clock.digits, success_text: clock.short, needs_approval: false, max_steps: 16)
+            wantAmPm = clock.ampm
+            defer { wantAmPm = nil }
             guard await doScreen(task, routine: nil, values: [:]) else { return false }
             // Only say it's set when Clock's list really shows it (read on the phone, no AI).
             guard await screenShows(clock.short, within: 3) else {
@@ -392,6 +396,33 @@ final class Agent: ObservableObject {
         let ampm = p[0] < 12 ? "AM" : "PM"
         let short = String(format: "%d:%02d", h12, p[1])
         return (short + " " + ampm, short, String(format: "%02d%02d", h12, p[1]), ampm)
+    }
+
+    /// Clock's AM/PM wheel can't be typed and ignores taps on the other row (debug run
+    /// 2026-11-13_143418: the alarm stayed PM). The selected row is the bigger text; drag the wheel
+    /// one row (down brings AM, which sits above, into the middle; up brings PM), then check.
+    private func setAmPm(_ want: String) async -> Bool {
+        guard let capture, let pointer, let link else { return false }
+        for _ in 0..<3 {
+            await capture.waitForSettle(quiet: 0.3, maxWait: 1.5)
+            guard let frame = capture.latestImage() else { return false }
+            let items = await ScreenReader.read(frame)
+            guard let am = items.first(where: { Words.norm($0.text) == "am" }),
+                  let pm = items.first(where: { Words.norm($0.text) == "pm" }) else {
+                add("AM/PM wheel not found on screen"); return false
+            }
+            let selected = am.box.height > pm.box.height ? "AM" : "PM"
+            if selected == want { add("\(want) is set (checked on screen)"); return true }
+            let row = abs(pm.center.y - am.center.y)
+            let from = selected == "PM" ? pm.center : am.center
+            let to = CGPoint(x: from.x, y: from.y + (selected == "PM" ? row : -row))
+            guard let a = pointer.counts(for: toScreen(from, frame: frame)),
+                  let b = pointer.counts(for: toScreen(to, frame: frame)) else { return false }
+            await link.run("drag \(a.0) \(a.1) \(b.0) \(b.1)")
+            try? await Task.sleep(for: .milliseconds(700))
+        }
+        add("Couldn't set \(want) on the wheel")
+        return false
     }
 
     /// Whether some text shows on screen within a few seconds (read on the phone, no AI).
@@ -951,6 +982,9 @@ final class Agent: ObservableObject {
                              label: "", items: items, frame: frame, text: text, what: "type into \(field.what)")
                     history.append("tapped the text field and typed \"\(text)\" (it shows in the field; not sent yet)")
                     add("Step \(n): typed \"\(text)\" into \"\(field.what)\" (\(seconds(since: t)))", image: shot)
+                    if let want = wantAmPm, text.allSatisfy(\.isNumber) {
+                        if await setAmPm(want) { history.append("the time is set, \(want) included: don't touch the wheels again") }
+                    }
                 } else if typeTries >= 2 {
                     end("❌ Typed twice, but the text doesn't show on screen"); return false
                 } else {

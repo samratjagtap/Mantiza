@@ -54,11 +54,14 @@ final class RoutineStore: ObservableObject {
 
     /// Routines learned wrongly by older builds: dropped on start if learned before the date.
     /// - WhatsApp send routine had learned "Open in WhatsApp Business" (debug run 2026-11-10_111607).
+    /// - "clock: check alarms" had learned to flip an alarm's switch (debug run 2026-11-13_135928).
     /// - Instagram routines learned while Instagram hadn't opened (debug runs 2026-11-10_112947, _113142).
     private static let retired: [String: Date] = [
         "whatsapp: tap send after the link opened the chat": .distantFuture,
         "instagram: open dms": cutoff,
         "instagram: open the profile of {person}": cutoff,
+        // Learned tapping the 10:22 AM alarm's switch while only checking alarms (2026-11-13_135928).
+        "clock: check alarms": ISO8601DateFormatter().date(from: "2026-11-13T20:30:00+05:30")!,
     ]
     private static let cutoff = ISO8601DateFormatter().date(from: "2026-11-10T12:30:00+05:30")!
 
