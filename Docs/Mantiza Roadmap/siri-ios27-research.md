@@ -86,7 +86,13 @@ The same Siri as iOS 26. It works by fixed commands, not conversation.
 ## What this means for Mantiza
 1. **On the iPhone 14 Plus, Siri Classic is the Siri to use.** It's fast, offline-capable and sure for alarms, timers, settings toggles, calls, messages and opening apps. Those are the jobs where screen tapping is slow or fragile; the Clock alarm runs are the example.
 2. **Siri AI wouldn't replace Mantiza even on a 15 Pro.** It only works inside apps that built Siri actions. Mantiza's StickS3 can tap through any app, which is the gap reviewers point out.
-3. **Possible route (not built):** Mantiza uses the StickS3's Siri key with **Type to Siri** on, types the request, and reads Siri's answer from the screen to confirm. **[Check]** whether the StickS3's Siri key opens the typing box.
+3. **Built (2026-11-14): Mantiza hands Siri's jobs to Siri.** Tested by hand on the iPhone 14 Plus:
+   - a short Siri key press does nothing; **holding it 1 s** opens Siri's typing box (Type to Siri on)
+   - the request must be typed at once: the box closes after a few seconds, and late typing lands in Search
+   - Enter sends it, Siri answers, **Escape closes Siri**
+   Mantiza goes to the Home Screen first, checks the request shows in Siri's box (not in Search),
+   reads Siri's answer, and only then reports done. Used for alarms and timers (with the old routes as
+   fallback), phone settings, live info, notes and music.
 
 ## Sources
 - Apple: [Siri AI is here (Sept 2026)](https://www.apple.com/newsroom/2026/09/siri-ai-a-profoundly-more-capable-and-personal-assistant-is-here/) · [Apple Intelligence, WWDC26](https://www.apple.com/newsroom/2026/06/apple-intelligence-brings-powerful-ai-capabilities-into-everyday-experiences/) · [More languages (Oct 2026)](https://www.apple.com/newsroom/2026/10/siri-ai-is-available-in-more-languages-starting-today/) · [Apple Intelligence requirements and limits](https://support.apple.com/en-us/121115) · [WWDC26: App Schemas](https://developer.apple.com/videos/play/wwdc2026/240/) · [WWDC26: App Intents for Siri](https://developer.apple.com/videos/play/wwdc2026/343/) · [Siri settings, iPhone User Guide (iOS 15)](https://support.apple.com/en-asia/guide/iphone/iphc28624b81/15.0/ios)

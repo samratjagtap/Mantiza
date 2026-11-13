@@ -161,6 +161,19 @@ final class Agent: ObservableObject {
             if let q = step.question, !q.isEmpty { await answerFromScreen(q) }
             return true
 
+        case "siri":
+            guard let text = step.text, !text.isEmpty else { end("❌ What should Siri do?"); return false }
+            switch await askSiri(text, state: step.state, stateValue: step.state_value) {
+            case .done(let reply):
+                answers.append(reply)
+                add("🗣 Siri: \(reply)")
+                return true
+            case .unconfirmed(let why):
+                end("❓ Siri was asked \"\(text)\", but its answer couldn't be confirmed (\(why))"); return false
+            case .failed(let why):
+                end("❌ Siri: \(why)"); return false
+            }
+
         case "open_app":
             guard let app = step.app else { end("❌ Which app?"); return false }
             guard await open(app: app) else { return false }
@@ -202,6 +215,18 @@ final class Agent: ObservableObject {
             // set alarm look missing.
             guard let time = step.time, let clock = Agent.clockTime(time) else { end("❌ What time?"); return false }
             let days = step.days ?? []
+            switch await askSiri("Set an alarm for \(clock.shown)" + Agent.repeatPhrase(days)
+                                 + (step.text.map { " called \($0)" } ?? ""),
+                                 expectAny: [clock.short, "\(clock.short.split(separator: ":")[0]) \(clock.ampm.lowercased())"]) {
+            case .done(let reply):
+                add("⏰ Alarm \(clock.shown)" + (days.isEmpty ? "" : ", " + days.map(\.capitalized).joined(separator: ", "))
+                    + " set by Siri (in Clock) · Siri: \(reply)")
+                return true
+            case .unconfirmed(let why):
+                end("❓ Siri was asked to set the alarm, but its answer couldn't be confirmed (\(why)). Check Clock."); return false
+            case .failed(let why):
+                add("Siri didn't set it (\(why)); setting it in the Clock app instead")
+            }
             let repeatText = days.isEmpty ? "No repeat (it rings once)."
                 : "Repeat on " + days.map(\.capitalized).joined(separator: ", ")
                   + ": under Repeat, tap the day circles (S M T W T F S, Sunday first) for these days so they are highlighted."
@@ -228,6 +253,16 @@ final class Agent: ObservableObject {
 
         case "timer":
             guard let s = step.seconds else { end("❌ How long?"); return false }
+            switch await askSiri("Set a timer for " + Agent.durationPhrase(s) + (step.text.map { " called \($0)" } ?? ""),
+                                 expectAny: ["timer"]) {
+            case .done(let reply):
+                add("⏱ Timer for \(Agent.durationPhrase(s)) set by Siri (in Clock) · Siri: \(reply)")
+                return true
+            case .unconfirmed(let why):
+                end("❓ Siri was asked to set the timer, but its answer couldn't be confirmed (\(why)). Check Clock."); return false
+            case .failed(let why):
+                add("Siri didn't set it (\(why)); setting it directly instead")
+            }
             status = "Setting a timer…"
             do {
                 let what = try await Direct.timer(seconds: s, label: step.text)
@@ -393,6 +428,143 @@ final class Agent: ObservableObject {
 
     private func appName(_ kind: String) -> String {
         ["call": "Phone", "whatsapp": "WhatsApp", "sms": "Messages", "email": "Mail"][kind] ?? kind
+    }
+
+    // MARK: - Siri: what the iPhone's own assistant does, Mantiza hands to it
+
+    enum SiriOutcome {
+        case done(String)         // Siri did it / answered (its reply)
+        case failed(String)       // Siri didn't get it or said no: safe to try another way
+        case unconfirmed(String)  // Siri got the request but its answer can't be read: don't redo it
+    }
+
+    /// Hands a request to Siri, like typing it to Siri yourself: the device HOLDS the Siri key 1 s
+    /// (a short press does nothing), Siri's typing box opens (needs Settings → Accessibility → Siri →
+    /// Type to Siri), the device types the request at once (the box closes after a few seconds and
+    /// late typing lands in Search) and presses Enter. Mantiza reads Siri's answer from the screen,
+    /// then Escape closes Siri. Tested by hand on the iPhone 14 Plus (iOS 27, Siri Classic), 2026-11-14.
+    func askSiri(_ request: String, expectAny: [String] = [], state: String? = nil, stateValue: Bool? = nil) async -> SiriOutcome {
+        guard let link, let capture else { return .failed("no device") }
+        if !capture.running { guard await startEyes() else { return .failed("screen sharing didn't start") } }
+        status = "Asking Siri…"
+        let t = Date()
+        // Siri opens over whatever is on screen. Mantiza's own screen (the request in its box, its log)
+        // would look like Siri's text, so start from the Home Screen, and remember what it shows.
+        if UIApplication.shared.applicationState != .background {
+            await goHome()
+            await capture.waitForSettle(quiet: 0.3, maxWait: 1.5)
+        }
+        let before = await screenLines()
+        guard (await link.run("keyhold siri 1000")).hasPrefix("ok") else {
+            return .failed("the device can't hold the Siri key: update its firmware")
+        }
+        try? await Task.sleep(for: .milliseconds(900))
+        await type(request)
+        // The request must show in Siri's box; otherwise Siri opened for voice (Type to Siri off) or
+        // didn't open, and Enter must not be pressed.
+        let firstWords = Words.norm(request.split(separator: " ").prefix(3).joined(separator: " "))
+        var typedShows = false
+        var inSearch = false
+        for _ in 0..<6 where !typedShows {
+            try? await Task.sleep(for: .milliseconds(300))
+            let now = await screenLines()
+            typedShows = now.contains { !before.contains($0) && $0.contains(firstWords) }
+            // Typing on the Home Screen opens Search when Siri's box isn't there: Enter would search
+            // the web (seen in the hand test, 2026-11-14).
+            inSearch = now.contains { ["siri suggestions", "show more", "top hit", "search in app", "search the web"].contains($0) }
+        }
+        if inSearch {
+            await link.run("k esc")
+            return .failed("Siri's typing box didn't open (Search opened instead)")
+        }
+        guard typedShows else {
+            await link.run("k esc")
+            return .failed("Siri's typing box didn't show the request. Is Type to Siri on? (Settings → Accessibility → Siri)")
+        }
+        await link.run("k enter")
+
+        // Exact answer straight from iOS where it can tell (Low Power Mode, Dark Mode, flashlight)
+        if let state, let want = stateValue {
+            for _ in 0..<12 {
+                try? await Task.sleep(for: .milliseconds(250))
+                if PhoneState.read(state) == want { break }
+            }
+            if let now = PhoneState.read(state) {
+                let reply = await siriReply(excluding: request, before: before)
+                await link.run("k esc")
+                return now == want ? .done(reply.isEmpty ? "done" : reply)
+                                   : .failed("iOS says \(state.replacingOccurrences(of: "_", with: " ")) isn't \(want ? "on" : "off")" + (reply.isEmpty ? "" : " · Siri: \(reply)"))
+            }
+        }
+
+        // Siri's answer: wait for it to settle, then read it
+        try? await Task.sleep(for: .milliseconds(1200))
+        await capture.waitForSettle(quiet: 0.5, maxWait: 4)
+        let reply = await siriReply(excluding: request, before: before)
+        let shot = capture.latestImage().flatMap { Marks.plain($0) }.flatMap { UIImage(data: $0) }
+        let lower = reply.lowercased()
+        let refusals = ["sorry", "i can't", "i cannot", "i couldn't", "i'm not able", "i don't", "something went wrong",
+                        "isn't available", "not available", "try again", "here's what i found", "i found this on the web"]
+        if reply.isEmpty {
+            await link.run("k esc")
+            return .unconfirmed("no reply on screen")
+        }
+        if refusals.contains(where: { lower.contains($0) }) {
+            add("Siri (\(seconds(since: t))): \(reply)", image: shot)
+            await link.run("k esc")
+            return .failed("Siri said: \(reply)")
+        }
+        if !expectAny.isEmpty, !expectAny.contains(where: { Words.norm(reply).contains(Words.norm($0)) }) {
+            add("Siri (\(seconds(since: t))): \(reply)", image: shot)
+            await link.run("k esc")
+            return .unconfirmed("Siri's answer doesn't mention \(expectAny.first ?? "it")")
+        }
+        add("Siri answered in \(seconds(since: t))", image: shot)
+        await link.run("k esc")
+        return .done(reply)
+    }
+
+    /// The screen's text lines, normalised.
+    private func screenLines() async -> [String] {
+        guard let capture, let frame = capture.latestImage() else { return [] }
+        return await ScreenReader.read(frame).map { Words.norm($0.text) }.filter { !$0.isEmpty }
+    }
+
+    /// The text Siri added to the screen: not what was there before, not the request itself, not
+    /// Siri's own buttons.
+    private func siriReply(excluding request: String, before: [String]) async -> String {
+        guard let capture, let frame = capture.latestImage() else { return "" }
+        let asked = Words.norm(request)
+        let was = Set(before)
+        let skip: Set<String> = ["siri", "type to siri", "ask siri", "done", "cancel"]
+        let lines = await ScreenReader.read(frame).map(\.text).filter { line in
+            let n = Words.norm(line)
+            return !n.isEmpty && !was.contains(n) && !asked.contains(n) && !n.contains(asked) && !skip.contains(n)
+        }
+        return lines.joined(separator: " ").trimmingCharacters(in: .whitespaces)
+    }
+
+    /// " every weekday", " every Monday and Wednesday", "" for once.
+    static func repeatPhrase(_ days: [String]) -> String {
+        let d = Set(days.map { $0.lowercased() })
+        let weekdays: Set<String> = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+        if d.isEmpty { return "" }
+        if d.count == 7 { return " every day" }
+        if d == weekdays { return " every weekday" }
+        if d == ["saturday", "sunday"] { return " every weekend" }
+        let order = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+        let names = order.filter(d.contains).map(\.capitalized)
+        return " every " + (names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!)
+    }
+
+    /// 90 → "1 minute 30 seconds".
+    static func durationPhrase(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = (seconds % 3600) / 60, s = seconds % 60
+        var parts: [String] = []
+        if h > 0 { parts.append("\(h) hour" + (h == 1 ? "" : "s")) }
+        if m > 0 { parts.append("\(m) minute" + (m == 1 ? "" : "s")) }
+        if s > 0 || parts.isEmpty { parts.append("\(s) second" + (s == 1 ? "" : "s")) }
+        return parts.joined(separator: " ")
     }
 
     /// "07:00" → shown "7:00 AM", short "7:00" (as Clock's list shows it), digits "0700" (typed into

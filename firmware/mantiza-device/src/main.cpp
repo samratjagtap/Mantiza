@@ -464,6 +464,19 @@ static void sendFocusKey() {
 }
 
 // "key <name> [times]" or "key 0x00e9 [times]". Returns false if the name is unknown.
+// Holds one special key for <ms> (e.g. Siri, which iOS may only start on a long press like the
+// side button). "keyhold siri 800".
+static bool holdSpecialKey(String args) {
+  args.trim();
+  args.toLowerCase();
+  int sp = args.indexOf(' ');
+  uint32_t ms = sp > 0 ? constrain(args.substring(sp + 1).toInt(), 40, 5000) : 800;
+  String name = sp > 0 ? args.substring(0, sp) : args;
+  if (name.startsWith("0x")) { sendConsumer((uint16_t)strtol(name.c_str() + 2, nullptr, 16), ms); return true; }
+  for (auto& k : SPECIAL_KEYS) if (name == k.name) { sendConsumer(k.usage, ms); return true; }
+  return false;
+}
+
 static bool pressSpecialKey(String args) {
   args.trim();
   args.toLowerCase();
@@ -698,6 +711,7 @@ static void printHelp() {
     "  tap <x> <y>        same, then click\n"
     "  drag <x1> <y1> <x2> <y2>  press, slide, let go (absolute build; 0..32767)\n"
     "  share              open the Mantiza app and ask it to share the screen\n"
+    "  keyhold <name> <ms> hold a special key (e.g. keyhold siri 800)\n"
     "  key <name> [n]     special key: home lock screenshot brighter dimmer louder softer mute\n"
     "                     playpause next previous siri spotlight globe keyboard focus, or 0x....\n"
     "  status <text>      show what Mantiza is doing (no reply)\n"
@@ -747,6 +761,12 @@ static void handleCommand(String line, bool fromApp = false) {
       return;
     }
     dragTo(d1, d2, d3, d4);
+    reply("ok " + line, fromApp);
+    return;
+  }
+  if (wordIs(line, "keyhold")) {
+    if (!connected) { reply("not connected to the iPhone yet", fromApp); return; }
+    if (!holdSpecialKey(line.substring(7))) { reply("error " + line, fromApp); return; }
     reply("ok " + line, fromApp);
     return;
   }

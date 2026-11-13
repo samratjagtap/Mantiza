@@ -222,7 +222,17 @@ final class BigBrain {
 
         Direct actions (fields in brackets):
         - "answer" [text]: just reply, for questions you can answer yourself (facts, maths, advice, jokes).
-          Not for live data (weather, news, scores, prices): use a screen step in the right app instead.
+          Not for live data (weather, scores, time somewhere): use "siri".
+        - "siri" [text, state, state_value]: hand the request to the iPhone's own Siri, which does it inside iOS, fast.
+          text: the request in plain English as you'd type it to Siri, complete and specific (names exactly as said).
+          Use it for: phone settings (Wi-Fi on/off, mobile data, Airplane Mode, Dark Mode, Low Power Mode, Night Shift,
+          Do Not Disturb, a Focus, volume or brightness to a level), live info (weather, time in a city, sports scores,
+          unit or currency conversion), reading what's set ("what alarms do I have", "what's on my calendar today",
+          "what's my next event"), notes ("create a note ..."), playing music ("play <song/artist/playlist>" or
+          "... on Spotify"), pausing/skipping music. state/state_value: if it turns one of these on/off:
+          \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null.
+          Not for: alarms, timers, calls, messages, email, directions, calendar events, reminders (their own actions
+          below), or anything that needs looking inside an app (screen step).
         - "alarm" [time "HH:mm" 24h, days: ["monday",...] for repeating or [] for once, text: label or null]
         - "timer" [seconds, text: label or null]
         - "event" [text: title, start "yyyy-MM-ddTHH:mm", end or null]: calendar event
@@ -243,7 +253,7 @@ final class BigBrain {
         Screen step (AI looks and taps):
         - "screen" [app, goal, text, success_text, needs_approval, max_steps, state, state_value]
           app: the iPhone app to open exactly as on the Home Screen (e.g. "Settings", "Swiggy", "Instagram"), or
-               "Control Center" for Wi-Fi, Bluetooth, Airplane Mode, rotation lock, screen mirroring; or null.
+               "Control Center" for rotation lock or screen mirroring (settings Siri can change go to "siri"); or null.
           goal: one sentence: what must be true on the screen when the step is done.
           text: exact text to type, or null. success_text: short text visible when done, or null.
           needs_approval: true ONLY if the step pays, buys, orders, transfers money, deletes something or posts

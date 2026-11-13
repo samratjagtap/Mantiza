@@ -340,7 +340,7 @@ struct DeviceView: View {
             VStack(alignment: .leading, spacing: 26) {
                 ScreenTitle(text: "Device")
 
-                Card("StickS3", footer: "Pair it in iPhone Settings → Bluetooth, with AssistiveTouch on.") {
+                Card("StickS3", footer: "Pair it in iPhone Settings → Bluetooth, with AssistiveTouch on. For Siri tasks, turn on Settings → Accessibility → Siri → Type to Siri.") {
                     Row(key: "Bluetooth", value: link.bluetooth, dot: link.bluetooth.lowercased().contains("on"))
                     Row(key: "Connection", value: link.status, dot: link.ready)
                     Row(key: "Battery", value: link.battery)

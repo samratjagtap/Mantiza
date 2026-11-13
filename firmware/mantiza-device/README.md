@@ -18,6 +18,7 @@ This is the firmware for the real Mantiza app ([apps/mantiza](../../apps/mantiza
   - while a task runs, a magenta bar says FRONT BUTTON = STOP
 - **Front button = Stop** while a task runs (the app sends `task on` / `task off`; the device sends `stop`).
 - **Special keys** (`key <name> [times]`): the keys Apple lists for keyboards in its Accessory Design Guidelines (R32 Update 1, Tables 14-3 and 14-4): `home`, `lock`, `screenshot`, `brighter`, `dimmer`, `louder`, `softer`, `mute`, `playpause`, `next`, `previous`, `siri`, `spotlight`, `globe`, `keyboard`, and `focus` (Do Not Disturb). `key 0x00e9` sends any consumer usage. jinwon-int/esp32-iphone-agent sends some of the same keys over BLE.
+- **Holding a key** (`keyhold <name> <ms>`): iOS starts **Siri** only on a long press, like the side button. A short `key siri` does nothing; `keyhold siri 1000` opens Siri (its typing box when Type to Siri is on). Tested by hand on an iPhone 14 Plus, iOS 27, 2026-11-14.
 
 ## After flashing: pair again
 Each time the report map changes (version 4: absolute pointer; version 6: special keys), the device clears its old pairings when it starts.

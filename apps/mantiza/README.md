@@ -27,16 +27,17 @@ The real Mantiza app: you type what you want, and Mantiza does it on the iPhone 
 These choices come from the [brain bench](../../tools/brain-bench/README.md).
 
 ## First-time setup on the iPhone
-Only what iOS requires for any mouse: pair the device and turn on AssistiveTouch. Everything else is Mantiza's job (for example it opens Control Centre with a swipe, not with a button you have to set up).
+Pair the device, turn on AssistiveTouch, and turn on Type to Siri. Everything else is Mantiza's job (for example it opens Control Centre with a swipe, not with a button you have to set up).
 
 1. **Pair the device:** Settings → Bluetooth.
 2. **Turn on AssistiveTouch:** Settings → Accessibility → Touch → AssistiveTouch.
-3. **Open Mantiza** and allow Bluetooth and notifications.
-4. **Device tab:**
+3. **Turn on Type to Siri:** Settings → Accessibility → Siri → Type to Siri. Mantiza hands what Siri does well (alarms, timers, phone settings, weather, music, notes…) to Siri: the device holds the Siri key, types the request and reads Siri's answer. Without this switch Mantiza falls back to slower routes.
+4. **Open Mantiza** and allow Bluetooth and notifications.
+5. **Device tab:**
    - Check that it says **Ready ✅**.
    - Under Pointer it should say **"Jumps straight to each point"**. With the old firmware, tap **Calibrate pointer** instead.
    - Tap **Start** under Eyes, and the device presses the share button.
-5. **Task tab:** type a request and tap **Go**.
+6. **Task tab:** type a request and tap **Go**.
 
 ## Keys
 The keys are in `C:\Users\PC\.mantiza\keys.env`, outside the repo. `scripts/make_secrets.py` copies them into `Sources/Mantiza/Secrets.swift`, which is in `.gitignore`.
