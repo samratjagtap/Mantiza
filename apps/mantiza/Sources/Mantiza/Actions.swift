@@ -101,20 +101,22 @@ enum Direct {
         return AlarmAttributes(presentation: AlarmPresentation(alert: alert), metadata: AlarmInfo(), tintColor: .pink)
     }
 
-    /// Alarm at a clock time, once or on some weekdays. Returns a description for the log.
-    static func alarm(time: String, days: [String], label: String?) async throws -> String {
-        let parts = time.split(separator: ":").compactMap { Int($0) }
-        guard parts.count >= 2, (0..<24).contains(parts[0]), (0..<60).contains(parts[1]) else {
-            throw DirectError.missing("a time like 07:30")
+    /// Alarms now go into the Clock app (Agent, case "alarm"). Clock-time alarms Mantiza set earlier
+    /// with AlarmKit don't show in Clock and would keep ringing unseen: remove them once. Timers
+    /// (fixed time) stay. Returns how many were removed.
+    static func removeOldClockAlarms() -> Int {
+        let key = "alarmsMovedToClock"
+        guard !UserDefaults.standard.bool(forKey: key) else { return 0 }
+        var removed = 0
+        if let alarms = try? AlarmManager.shared.alarms {
+            for alarm in alarms {
+                if case .relative = alarm.schedule {
+                    if (try? AlarmManager.shared.cancel(id: alarm.id)) != nil { removed += 1 }
+                }
+            }
         }
-        try await alarmsAllowed()
-        let weekdays = days.compactMap(weekday)
-        let schedule = Alarm.Schedule.relative(.init(time: .init(hour: parts[0], minute: parts[1]),
-                                                     repeats: weekdays.isEmpty ? .never : .weekly(weekdays)))
-        let config = AlarmManager.AlarmConfiguration<AlarmInfo>.alarm(schedule: schedule,
-                                                                     attributes: attributes(label ?? "Alarm"))
-        _ = try await AlarmManager.shared.schedule(id: UUID(), configuration: config)
-        return String(format: "%02d:%02d", parts[0], parts[1]) + (weekdays.isEmpty ? "" : " on " + days.joined(separator: ", "))
+        UserDefaults.standard.set(true, forKey: key)
+        return removed
     }
 
     /// A timer, as an alarm at "now + seconds" (Apple's countdown style needs a widget extension).
@@ -322,6 +324,14 @@ enum Direct {
         "notes": "mobilenotes://", "music": "music://", "maps": "maps://", "photos": "photos-redirect://",
         "calendar": "calshow://", "reminders": "x-apple-reminderapp://", "shortcuts": "shortcuts://",
         "files": "shareddocuments://", "podcasts": "podcasts://", "appstore": "itms-apps://", "mail": "message://",
+        // Clock: the link opens the Alarms tab. It can't set an alarm, but opening Clock this way skips
+        // Home + Search (7.8 s and 14.5 s in debug runs 2026-11-13_143418 and _135928).
+        "clock": "clock-alarm://",
+        // More everyday apps (debug run 2026-11-13_172601: Airbnb went through Search). A link that
+        // doesn't work just falls back to Search.
+        "airbnb": "airbnb://", "zomato": "zomato://", "swiggy": "swiggy://", "amazon": "com.amazon.mobile.shopping://",
+        "discord": "discord://", "slack": "slack://", "teams": "msteams://", "outlook": "ms-outlook://",
+        "googledrive": "googledrive://", "googlephotos": "googlephotos://", "primevideo": "aiv://",
     ]
 
     static func appLink(_ app: String) -> URL? {

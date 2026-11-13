@@ -1,123 +1,140 @@
 import MantizaKit
 import SwiftUI
 
-// MARK: - Building blocks (sharp, plain, pixel-flavoured)
+// Mantiza's screens: minimal and calm. Plain dark background, clean system type, soft cards,
+// magenta only for the main action, green only for "connected / done", and the pixel head as the
+// one decorative element.
 
-/// A titled block with a hairline border and square corners.
-struct Panel<Content: View>: View {
+// MARK: - Building blocks
+
+/// A small grey label above a group ("STEPS", "STICKS3").
+struct Label2: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text.uppercased())
+            .font(Theme.mono(11, .medium))
+            .tracking(1.2)
+            .foregroundStyle(Theme.dim)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
+    }
+}
+
+/// A group of rows on a soft card, like iOS Settings. Rows are separated by hairlines.
+struct Card<Content: View>: View {
     let title: String?
+    let footer: String?
     @ViewBuilder var content: Content
 
-    init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ title: String? = nil, footer: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.footer = footer
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let title { SectionTag(title) }
-            content
+        VStack(alignment: .leading, spacing: 8) {
+            if let title { Label2(title) }
+            VStack(spacing: 0) {
+                Group(subviews: content) { rows in
+                    ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+                        if i > 0 { Rectangle().fill(Theme.line).frame(height: 0.5).padding(.leading, 16) }
+                        row
+                    }
+                }
+            }
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+            if let footer {
+                Text(footer).font(Theme.sans(12)).foregroundStyle(Theme.dim).padding(.horizontal, 4)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.panel)
-        .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
     }
 }
 
-/// "■ DEVICE": a small magenta square and a spaced, uppercase label.
-struct SectionTag: View {
-    let text: String
-    init(_ text: String) { self.text = text }
+/// "Battery ............ 84%" with an optional status dot.
+struct Row: View {
+    let key: String
+    let value: String
+    var dot: Bool?
     var body: some View {
-        HStack(spacing: 8) {
-            Rectangle().fill(Theme.magenta).frame(width: 6, height: 6)
-            Text(text.uppercased()).font(Theme.mono(11, .semibold)).tracking(2).foregroundStyle(Theme.dim)
+        HStack(spacing: 10) {
+            Text(key).font(Theme.sans(15)).foregroundStyle(Theme.text)
+            Spacer(minLength: 12)
+            if let dot { Dot(on: dot) }
+            Text(value).font(Theme.sans(15)).foregroundStyle(Theme.dim).multilineTextAlignment(.trailing)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
     }
 }
 
-/// A square status light.
-struct Light: View {
+/// A tappable row inside a card ("Connect again").
+struct ActionRow: View {
+    let title: String
+    var color = Theme.text
+    let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
+    var body: some View {
+        Button(action: action) {
+            Text(title).font(Theme.sans(15, .medium))
+                .foregroundStyle(color.opacity(enabled ? 1 : 0.35))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PressRow())
+    }
+}
+
+struct PressRow: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.background(configuration.isPressed ? Theme.raised : .clear)
+    }
+}
+
+/// A small round status dot; it breathes while something is in progress.
+struct Dot: View {
     let on: Bool
-    var blink = false
+    var color: Color? = nil
+    var pulse = false
     @State private var dim = false
     var body: some View {
-        Rectangle()
-            .fill(on ? Theme.green : Theme.magenta)
+        Circle()
+            .fill(color ?? (on ? Theme.green : Theme.dim.opacity(0.6)))
             .frame(width: 7, height: 7)
-            .opacity(blink && dim ? 0.25 : 1)
+            .opacity(pulse && dim ? 0.3 : 1)
             .onAppear {
-                guard blink else { return }
-                withAnimation(.easeInOut(duration: 0.6).repeatForever()) { dim = true }
+                guard pulse else { return }
+                withAnimation(.easeInOut(duration: 0.7).repeatForever()) { dim = true }
             }
     }
 }
 
-/// "KEY ········ VALUE"
-struct InfoRow: View {
-    let key: String
-    let value: String
-    var light: Bool?
-    var body: some View {
-        HStack(spacing: 8) {
-            if let light { Light(on: light) }
-            Text(key).font(Theme.mono(13)).foregroundStyle(Theme.dim)
-            Spacer(minLength: 12)
-            Text(value).font(Theme.mono(13)).foregroundStyle(Theme.text).multilineTextAlignment(.trailing)
-        }
-    }
-}
-
-/// Solid magenta block button (or outlined), uppercase mono.
-struct BlockButtonStyle: ButtonStyle {
-    var outlined = false
+/// Full-width buttons: filled (the main action) or quiet.
+struct MainButton: ButtonStyle {
+    var filled = true
     var color = Theme.magenta
     @Environment(\.isEnabled) private var enabled
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(Theme.mono(14, .bold))
-            .tracking(1.5)
-            .textCase(.uppercase)
-            .foregroundStyle(outlined ? color : Theme.ink)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 11)
+            .font(Theme.sans(15, .semibold))
+            .foregroundStyle(filled ? .white : Theme.text)
+            .padding(.vertical, 13)
             .frame(maxWidth: .infinity)
-            .background(outlined ? Color.clear : color.opacity(enabled ? 1 : 0.35))
-            .overlay(Rectangle().stroke(color.opacity(enabled ? 1 : 0.35), lineWidth: outlined ? 1.5 : 0))
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .background(filled ? color : Theme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35)
     }
 }
 
-/// The screen background, with a faint pixel grid.
-struct Backdrop: View {
+/// A screen's title ("Device", "Log").
+struct ScreenTitle: View {
+    let text: String
     var body: some View {
-        Theme.ink
-            .overlay(
-                Canvas { gc, size in
-                    let step: CGFloat = 24
-                    var x: CGFloat = 0
-                    while x < size.width {
-                        var y: CGFloat = 0
-                        while y < size.height {
-                            gc.fill(Path(CGRect(x: x, y: y, width: 1.5, height: 1.5)), with: .color(Theme.line.opacity(0.55)))
-                            y += step
-                        }
-                        x += step
-                    }
-                }
-            )
-            .ignoresSafeArea()
-    }
-}
-
-/// The pixel "MANTIZA" with letters typing in once.
-struct Wordmark: View {
-    var height: CGFloat = 18
-    var body: some View {
-        PixelArt(Logo.wordmark, assemble: true).frame(height: height)
+        Text(text).font(Theme.sans(30, .bold)).foregroundStyle(Theme.text)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 12)
     }
 }
 
@@ -132,8 +149,8 @@ struct TaskView: View {
     @State private var openShot: UUID?
 
     private let examples = ["Message Azad on WhatsApp: I'm coming", "Set an alarm for 7 AM every weekday",
-                            "Timer for 10 minutes", "Turn on the flashlight", "Brightness to 30%",
-                            "Remind me to buy milk tomorrow at 9", "Directions to India Gate", "Turn on Do Not Disturb"]
+                            "Turn on the flashlight", "Remind me to buy milk tomorrow at 9",
+                            "Directions to India Gate"]
 
     private var mood: Mood {
         if agent.running { return .working }
@@ -142,43 +159,43 @@ struct TaskView: View {
         return .idle
     }
 
+    private var empty: Bool { request.trimmingCharacters(in: .whitespaces).isEmpty }
+
     var body: some View {
-        ZStack {
-            Backdrop()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    hero
-                    input
-                    question
-                    if agent.steps.isEmpty && !agent.running { suggestions }
-                    if !agent.steps.isEmpty { timeline }
-                }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+        ScrollView {
+            VStack(spacing: 28) {
+                header
+                hero
+                input
+                question
+                if agent.steps.isEmpty && !agent.running { suggestions }
+                if !agent.steps.isEmpty { timeline }
             }
-            .scrollDismissesKeyboard(.interactively)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+            .animation(.easeOut(duration: 0.2), value: approvals.question)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .background(Theme.ink.ignoresSafeArea())
     }
 
     private var header: some View {
         HStack {
-            Wordmark(height: 16)
+            PixelArt(Logo.wordmark, animated: false).frame(height: 11)
             Spacer()
             HStack(spacing: 6) {
-                Light(on: link.ready, blink: !link.ready)
-                Text(link.ready ? "LINKED" : "NO DEVICE").font(Theme.mono(11, .semibold)).tracking(1.5)
-                    .foregroundStyle(link.ready ? Theme.green : Theme.magenta)
+                Dot(on: link.ready, pulse: !link.ready)
+                Text(link.ready ? "Connected" : "No device").font(Theme.sans(13)).foregroundStyle(Theme.dim)
             }
         }
-        .padding(.top, 8)
+        .padding(.top, 10)
     }
 
     private var hero: some View {
-        VStack(spacing: 14) {
-            PixelArt(Logo.head, mood: mood).frame(height: 120)
+        VStack(spacing: 18) {
+            PixelArt(Logo.head, mood: mood).frame(height: 76)
             Text(agent.status)
-                .font(Theme.mono(13))
+                .font(Theme.sans(16))
                 .foregroundStyle(mood == .failed ? Theme.magenta : Theme.text)
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
@@ -186,103 +203,125 @@ struct TaskView: View {
                 .animation(.easeOut(duration: 0.2), value: agent.status)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 18)
+        .padding(.top, 20)
     }
 
+    // One rounded field with the send (or stop) button inside it.
     private var input: some View {
-        Panel("Task") {
-            HStack(alignment: .top, spacing: 8) {
-                Text(">").font(Theme.mono(16, .bold)).foregroundStyle(Theme.green)
-                TextField("", text: $request, prompt: Text("what should mantiza do?").foregroundStyle(Theme.dim),
-                          axis: .vertical)
-                    .font(Theme.mono(16))
-                    .foregroundStyle(Theme.text)
-                    .tint(Theme.green)
-                    .lineLimit(1...4)
-                    .focused($typing)
-                    .submitLabel(.go)
-                    .onSubmit(run)
+        HStack(alignment: .bottom, spacing: 10) {
+            TextField("", text: $request, prompt: Text("Ask Mantiza…").foregroundStyle(Theme.dim), axis: .vertical)
+                .font(Theme.sans(16))
+                .foregroundStyle(Theme.text)
+                .tint(Theme.magenta)
+                .lineLimit(1...5)
+                .focused($typing)
+                .submitLabel(.go)
+                .onSubmit(run)
+                .padding(.vertical, 7)
+            Button {
+                if agent.running { agent.stop() } else { run() }
+            } label: {
+                Image(systemName: agent.running ? "stop.fill" : "arrow.up")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(agent.running ? Theme.ink : .white)
+                    .frame(width: 34, height: 34)
+                    .background(Circle().fill(agent.running ? Theme.text : Theme.magenta))
+                    .opacity(!agent.running && empty ? 0.35 : 1)
             }
-            if agent.running {
-                Button { agent.stop() } label: { Text("■ Stop") }
-                    .buttonStyle(BlockButtonStyle(outlined: true))
-            } else {
-                Button(action: run) { Text("Run ▸") }
-                    .buttonStyle(BlockButtonStyle())
-                    .disabled(request.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            .disabled(!agent.running && empty)
         }
+        .padding(.leading, 16)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .stroke(typing ? Theme.magenta.opacity(0.6) : Theme.line, lineWidth: 1))
+        .animation(.easeOut(duration: 0.15), value: typing)
     }
 
     private func run() {
-        guard !agent.running, !request.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        guard !agent.running, !empty else { return }
         typing = false
         agent.start(request)
     }
 
     @ViewBuilder private var question: some View {
-        if let q = approvals.question, let choices = approvals.choices {
-            Panel("Which one?") {
-                Text(q).font(Theme.mono(14)).foregroundStyle(Theme.text)
-                ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
-                    Button { approvals.pick(i) } label: { Text(c).textCase(nil) }
-                        .buttonStyle(BlockButtonStyle(outlined: true, color: Theme.green))
+        if let q = approvals.question {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(approvals.choices == nil ? "Needs your OK" : "Which one?")
+                    .font(Theme.mono(11, .medium)).tracking(1.2).textCase(.uppercase).foregroundStyle(Theme.dim)
+                Text(q).font(Theme.sans(16)).foregroundStyle(Theme.text)
+                if let choices = approvals.choices {
+                    ForEach(Array(choices.enumerated()), id: \.offset) { i, c in
+                        Button(c) { approvals.pick(i) }.buttonStyle(MainButton(filled: false))
+                    }
+                    Button("None of these") { approvals.pick(nil) }
+                        .font(Theme.sans(14)).foregroundStyle(Theme.dim).frame(maxWidth: .infinity)
+                } else {
+                    HStack(spacing: 10) {
+                        Button("Not now") { approvals.answer(false) }.buttonStyle(MainButton(filled: false))
+                        Button("Approve") { approvals.answer(true) }.buttonStyle(MainButton())
+                    }
                 }
-                Button("None of these") { approvals.pick(nil) }.buttonStyle(BlockButtonStyle(outlined: true))
             }
-            .transition(.move(edge: .top).combined(with: .opacity))
-        } else if let q = approvals.question {
-            Panel("Needs your OK") {
-                Text(q).font(Theme.mono(14)).foregroundStyle(Theme.text)
-                HStack(spacing: 10) {
-                    Button("Approve") { approvals.answer(true) }.buttonStyle(BlockButtonStyle(color: Theme.green))
-                    Button("Don't") { approvals.answer(false) }.buttonStyle(BlockButtonStyle(outlined: true))
-                }
-            }
-            .transition(.move(edge: .top).combined(with: .opacity))
+            .padding(16)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous).stroke(Theme.magenta.opacity(0.5), lineWidth: 1))
+            .transition(.opacity.combined(with: .scale(scale: 0.97)))
         }
     }
 
     private var suggestions: some View {
-        Panel("Try") {
+        VStack(alignment: .leading, spacing: 4) {
+            Label2("Try")
             ForEach(examples, id: \.self) { e in
                 Button { request = e } label: {
-                    HStack(spacing: 10) {
-                        Text("▸").foregroundStyle(Theme.magenta)
-                        Text(e).foregroundStyle(Theme.text).multilineTextAlignment(.leading)
-                        Spacer()
-                    }
-                    .font(Theme.mono(13))
-                    .padding(.vertical, 4)
+                    Text(e).font(Theme.sans(15)).foregroundStyle(Theme.text.opacity(0.8))
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 4)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
     }
 
     private var timeline: some View {
-        Panel("Steps") {
-            ForEach(Array(agent.steps.enumerated()), id: \.element.id) { i, step in
-                let current = agent.running && i == agent.steps.count - 1
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 10) {
-                        Light(on: !step.text.hasPrefix("❌"), blink: current)
-                            .padding(.top, 5)
-                        Text(step.text).font(Theme.mono(12)).foregroundStyle(current ? Theme.text : Theme.text.opacity(0.85))
-                        Spacer(minLength: 0)
-                        if step.image != nil {
-                            Button { openShot = openShot == step.id ? nil : step.id } label: {
-                                Image(systemName: openShot == step.id ? "eye.slash" : "eye").font(.system(size: 12))
-                                    .foregroundStyle(Theme.dim)
+        VStack(alignment: .leading, spacing: 12) {
+            Label2("Steps")
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(agent.steps.enumerated()), id: \.element.id) { i, step in
+                    let current = agent.running && i == agent.steps.count - 1
+                    let failed = step.text.hasPrefix("❌")
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Dot(on: true, color: failed ? Theme.magenta : (current ? Theme.text : Theme.green.opacity(0.8)),
+                                pulse: current)
+                                .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                            Text(step.text).font(Theme.sans(14))
+                                .foregroundStyle(current ? Theme.text : Theme.text.opacity(0.7))
+                            Spacer(minLength: 0)
+                            if step.image != nil {
+                                Button { withAnimation(.easeOut(duration: 0.2)) { openShot = openShot == step.id ? nil : step.id } } label: {
+                                    Image(systemName: openShot == step.id ? "photo.fill" : "photo")
+                                        .font(.system(size: 13)).foregroundStyle(Theme.dim)
+                                }
                             }
                         }
+                        if let image = step.image, openShot == step.id {
+                            Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 380)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .padding(.leading, 19)
+                        }
                     }
-                    if let image = step.image, openShot == step.id {
-                        Image(uiImage: image).resizable().scaledToFit().frame(maxHeight: 360)
-                            .overlay(Rectangle().stroke(Theme.line, lineWidth: 1))
-                    }
+                    .transition(.opacity)
                 }
-                .transition(.asymmetric(insertion: .move(edge: .leading).combined(with: .opacity), removal: .opacity))
             }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
         }
         .animation(.easeOut(duration: 0.25), value: agent.steps.count)
     }
@@ -297,87 +336,74 @@ struct DeviceView: View {
     @EnvironmentObject var routines: RoutineStore
 
     var body: some View {
-        ZStack {
-            Backdrop()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 12) {
-                        PixelArt(Logo.small, mood: link.ready ? .idle : .failed).frame(height: 30)
-                        Text("DEVICE").font(Theme.mono(20, .bold)).tracking(4).foregroundStyle(Theme.text)
-                        Spacer()
-                    }
-                    .padding(.top, 8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                ScreenTitle(text: "Device")
 
-                    Panel("StickS3") {
-                        InfoRow(key: "Bluetooth", value: link.bluetooth, light: link.bluetooth.lowercased().contains("on"))
-                        InfoRow(key: "Link", value: link.status, light: link.ready)
-                        InfoRow(key: "Battery", value: link.battery)
-                        Button("Connect again") { link.connect() }.buttonStyle(BlockButtonStyle(outlined: true, color: Theme.green))
-                        Text("Pair it in iPhone Settings → Bluetooth, with AssistiveTouch on.")
-                            .font(Theme.mono(11)).foregroundStyle(Theme.dim)
-                    }
+                Card("StickS3", footer: "Pair it in iPhone Settings → Bluetooth, with AssistiveTouch on. For Siri tasks, turn on Settings → Accessibility → Siri → Type to Siri.") {
+                    Row(key: "Bluetooth", value: link.bluetooth, dot: link.bluetooth.lowercased().contains("on"))
+                    Row(key: "Connection", value: link.status, dot: link.ready)
+                    Row(key: "Battery", value: link.battery)
+                    ActionRow(title: "Connect again", color: Theme.green) { link.connect() }
+                }
 
-                    Panel("Pointer") {
-                        if link.absolute == true {
-                            InfoRow(key: "Mode", value: "absolute · no calibration", light: true)
-                        } else {
-                            InfoRow(key: "Mode", value: pointer.calibration, light: pointer.calibrated)
-                            Button("Calibrate") { pointer.startCalibration() }
-                                .buttonStyle(BlockButtonStyle(outlined: true, color: Theme.green))
-                                .disabled(!link.ready || pointer.calibrating)
-                        }
-                    }
-
-                    Panel("Eyes") {
-                        InfoRow(key: "Screen sharing", value: capture.state, light: capture.running)
-                        HStack(spacing: 10) {
-                            Button("Start") { Task { await pointer.startSharing() } }
-                                .buttonStyle(BlockButtonStyle(outlined: true, color: Theme.green))
-                                .disabled(!link.ready || !pointer.calibrated || capture.running)
-                            Button("Stop") { capture.stop() }
-                                .buttonStyle(BlockButtonStyle(outlined: true))
-                                .disabled(!capture.running)
-                        }
-                        Text("Stays on between tasks. Locking the phone stops it; the next task starts it again.")
-                            .font(Theme.mono(11)).foregroundStyle(Theme.dim)
-                    }
-
-                    Panel("Learned routines") {
-                        if routines.all.isEmpty {
-                            Text("None yet. Screen tasks the AI finishes are learned here and replayed without AI.")
-                                .font(Theme.mono(12)).foregroundStyle(Theme.dim)
-                        }
-                        ForEach(routines.all.sorted { $0.learned > $1.learned }) { r in
-                            HStack(alignment: .top, spacing: 10) {
-                                Light(on: r.replays > 0)
-                                    .padding(.top, 5)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(r.name).font(Theme.mono(13)).foregroundStyle(Theme.text)
-                                    Text("\(r.steps.count) step\(r.steps.count == 1 ? "" : "s") · \(r.replays)× without AI")
-                                        .font(Theme.mono(11)).foregroundStyle(Theme.dim)
-                                }
-                                Spacer()
-                                Button { withAnimation { routines.delete(r.name) } } label: {
-                                    Text("✕").font(Theme.mono(13)).foregroundStyle(Theme.magenta)
-                                }
-                            }
-                        }
-                        if !routines.all.isEmpty {
-                            Button("Forget all") { withAnimation { routines.deleteAll() } }
-                                .buttonStyle(BlockButtonStyle(outlined: true))
-                        }
-                    }
-
-                    Panel("Brains") {
-                        InfoRow(key: "Fast · Luna Decisions", value: Keys.fastBrainRoute, light: Keys.fastBrainRoute != "missing key")
-                        InfoRow(key: "Big · Gemini 3.5 Flash-Lite", value: Keys.gemini.isEmpty ? "missing key" : "AI Studio",
-                                light: !Keys.gemini.isEmpty)
+                Card("Pointer") {
+                    if link.absolute == true {
+                        Row(key: "Mode", value: "Absolute", dot: true)
+                    } else {
+                        Row(key: "Mode", value: pointer.calibration, dot: pointer.calibrated)
+                        ActionRow(title: "Calibrate", color: Theme.green) { pointer.startCalibration() }
+                            .disabled(!link.ready || pointer.calibrating)
                     }
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+
+                Card("Screen sharing", footer: "Stays on between tasks. Locking the phone stops it; the next task starts it again.") {
+                    Row(key: "Status", value: capture.state, dot: capture.running)
+                    if capture.running {
+                        ActionRow(title: "Stop sharing", color: Theme.magenta) { capture.stop() }
+                    } else {
+                        ActionRow(title: "Start sharing", color: Theme.green) { Task { await pointer.startSharing() } }
+                            .disabled(!link.ready || !pointer.calibrated)
+                    }
+                }
+
+                Card("Learned routines", footer: routines.all.isEmpty
+                     ? "Screen tasks the AI finishes are learned here and then replayed without AI." : nil) {
+                    if routines.all.isEmpty {
+                        Row(key: "None yet", value: "")
+                    }
+                    ForEach(routines.all.sorted { $0.learned > $1.learned }) { r in
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(r.name).font(Theme.sans(15)).foregroundStyle(Theme.text)
+                                Text("\(r.steps.count) step\(r.steps.count == 1 ? "" : "s") · replayed \(r.replays)×")
+                                    .font(Theme.sans(12)).foregroundStyle(Theme.dim)
+                            }
+                            Spacer()
+                            Button { withAnimation { routines.delete(r.name) } } label: {
+                                Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Theme.dim).frame(width: 28, height: 28)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 11)
+                    }
+                    if !routines.all.isEmpty {
+                        ActionRow(title: "Forget all", color: Theme.magenta) { withAnimation { routines.deleteAll() } }
+                    }
+                }
+
+                Card("Brains") {
+                    Row(key: "Fast", value: Keys.fastBrainRoute == "missing key" ? "Missing key" : "Luna Decisions",
+                        dot: Keys.fastBrainRoute != "missing key")
+                    Row(key: "Big", value: Keys.gemini.isEmpty ? "Missing key" : "Gemini 3.5 Flash-Lite",
+                        dot: !Keys.gemini.isEmpty)
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
         }
+        .background(Theme.ink.ignoresSafeArea())
         .fullScreenCover(isPresented: $pointer.calibrating) { CalibrationCatcher() }
     }
 }
@@ -388,44 +414,36 @@ struct LogView: View {
     @EnvironmentObject var link: DeviceLink
 
     var body: some View {
-        ZStack {
-            Backdrop()
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 12) {
-                        PixelArt(Logo.small, animated: false, assemble: false).frame(height: 22)
-                        Text("LOG").font(Theme.mono(20, .bold)).tracking(4).foregroundStyle(Theme.text)
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                    ForEach(link.log) { line in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text(line.time, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
-                                .font(Theme.mono(10)).foregroundStyle(Theme.green.opacity(0.8))
-                            Text(line.text).font(Theme.mono(11)).foregroundStyle(Theme.text.opacity(0.9))
-                        }
-                        .padding(.vertical, 3)
-                        Rectangle().fill(Theme.line).frame(height: 1)
-                    }
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ScreenTitle(text: "Log").padding(.bottom, 14)
+                if link.log.isEmpty {
+                    Text("Nothing yet.").font(Theme.sans(15)).foregroundStyle(Theme.dim)
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 30)
+                ForEach(link.log) { line in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(line.time, format: .dateTime.hour(.twoDigits(amPM: .omitted)).minute().second())
+                            .font(Theme.mono(11)).foregroundStyle(Theme.dim)
+                        Text(line.text).font(Theme.mono(12)).foregroundStyle(Theme.text.opacity(0.85))
+                    }
+                    .padding(.vertical, 7)
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
         }
+        .background(Theme.ink.ignoresSafeArea())
     }
 }
 
 // MARK: - Boot
 
-/// First thing on launch: the head assembles, the name types in, then the app fades in.
+/// App start: the head is there at once, flicks its antennae and blinks twice (~1 s), then the app.
 struct BootView: View {
     var body: some View {
         ZStack {
             Theme.ink.ignoresSafeArea()
-            VStack(spacing: 26) {
-                PixelArt(Logo.head, mood: .idle).frame(height: 150)
-                Wordmark(height: 22)
-            }
+            PixelArt(Logo.head, mood: .greeting).frame(height: 96)
         }
     }
 }

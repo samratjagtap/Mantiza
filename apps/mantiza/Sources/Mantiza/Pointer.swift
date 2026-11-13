@@ -137,11 +137,19 @@ final class Pointer: ObservableObject {
         capture.showPicker()
         try? await Task.sleep(for: .seconds(2))
         _ = await tap(pickerButton)
-        for _ in 0..<16 {
+        for i in 0..<16 {
             if capture.starts > before { return true }
+            // Debug runs 2026-11-12_131937 and _132024: one press, no start. Press once more after
+            // 3 s (the sheet may have been late), bringing Mantiza forward again if it went behind.
+            if i == 6 {
+                let front = UIApplication.shared.applicationState == .active
+                note("Screen sharing: no start after the first press (Mantiza \(front ? "in front" : "behind"), \(capture.state)); pressing again")
+                if !front { capture.showPicker(); try? await Task.sleep(for: .seconds(2)) }
+                _ = await tap(pickerButton)
+            }
             try? await Task.sleep(for: .milliseconds(500))
         }
-        note("Screen sharing didn't start (state: \(capture.state))")
+        note("Screen sharing didn't start (state: \(capture.state), Mantiza \(UIApplication.shared.applicationState == .active ? "in front" : "behind"))")
         return capture.starts > before
     }
 }

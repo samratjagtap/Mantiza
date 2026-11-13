@@ -58,10 +58,11 @@ public enum Mood: Equatable {
     case working    // a scan wave runs across the head
     case done       // glows green for a moment
     case failed     // dims
+    case greeting   // app start: the antennae flick and the eyes blink twice, in about a second
 }
 
 /// Draws a pixel grid crisply at any size (square pixels with small gaps, like the logo), with
-/// Mantiza's own animations: pixels assemble on first show, then the mood's animation.
+/// Mantiza's own animations for each mood (and, if asked, pixels that assemble on first show).
 public struct PixelArt: View {
     let grid: [String]
     let mood: Mood
@@ -70,7 +71,7 @@ public struct PixelArt: View {
     @State private var born = Date()
     @State private var moodSince = Date()
 
-    public init(_ grid: [String] = Logo.head, mood: Mood = .idle, animated: Bool = true, assemble: Bool = true) {
+    public init(_ grid: [String] = Logo.head, mood: Mood = .idle, animated: Bool = true, assemble: Bool = false) {
         self.grid = grid
         self.mood = mood
         self.animated = animated
@@ -138,6 +139,10 @@ public struct PixelArt: View {
             if ch == "M", k > 0, Int(moodAge * 10) % 2 == 0 || moodAge > 0.4 {
                 color = k > 0.5 ? Theme.green : Theme.magenta
             }
+        case .greeting:
+            // Antennae flick upward fast; the eyes shut twice (0.22 s and 0.52 s in), then stay open.
+            if antenna { alpha *= 0.35 + 0.65 * (0.5 + 0.5 * sin(age * 14 + Double(y) * 1.6)) }
+            if eye, (0.22..<0.34).contains(age) || (0.52..<0.64).contains(age) { color = Theme.magenta }
         case .failed:
             if ch == "M" { alpha *= 0.45 }
             if eye { color = Theme.magenta; alpha *= 0.6 }

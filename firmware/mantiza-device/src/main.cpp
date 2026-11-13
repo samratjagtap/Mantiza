@@ -10,7 +10,7 @@
 // ("tap x y", "t hello", "k cmd+space", "status Opening WhatsApp") and the device answers with
 // notifications ("ok ...", "hi ...", "stop").
 //
-// Screen:   connection, battery and what Mantiza is doing (sent by the app).
+// Screen:   Mantiza's pixel head and wordmark, connection, battery and what Mantiza is doing.
 // Buttons:  front = Stop while a task runs; any button wakes the screen.
 // Serial:   USB at 115200 baud, type "help" for commands.
 
@@ -464,6 +464,19 @@ static void sendFocusKey() {
 }
 
 // "key <name> [times]" or "key 0x00e9 [times]". Returns false if the name is unknown.
+// Holds one special key for <ms> (e.g. Siri, which iOS may only start on a long press like the
+// side button). "keyhold siri 800".
+static bool holdSpecialKey(String args) {
+  args.trim();
+  args.toLowerCase();
+  int sp = args.indexOf(' ');
+  uint32_t ms = sp > 0 ? constrain(args.substring(sp + 1).toInt(), 40, 5000) : 800;
+  String name = sp > 0 ? args.substring(0, sp) : args;
+  if (name.startsWith("0x")) { sendConsumer((uint16_t)strtol(name.c_str() + 2, nullptr, 16), ms); return true; }
+  for (auto& k : SPECIAL_KEYS) if (name == k.name) { sendConsumer(k.usage, ms); return true; }
+  return false;
+}
+
 static bool pressSpecialKey(String args) {
   args.trim();
   args.toLowerCase();
@@ -532,9 +545,12 @@ static void dragTo(int x1, int y1, int x2, int y2, int steps = 14) {
 }
 
 // ---------------------------------------------------------------------------
-// Screen (135 x 240, portrait): connection, battery, and what Mantiza is doing.
-// The app sends "status <text>" at every step. The screen turns off after a minute without
-// news and wakes on a button or a new status.
+// Screen (135 x 240, portrait) in Mantiza's pixel look (images/, same as the app):
+// the pixel mantis head, the MANTIZA wordmark, two lights (iPhone, app), battery, and what Mantiza
+// is doing. The app sends "status <text>" at every step. The head moves a little: the eyes blink
+// now and then, a scan line runs through it while a task runs, and it is dim while no iPhone is
+// connected. Drawn into an off-screen canvas first, so nothing flickers.
+// The screen turns off after a minute without news and wakes on a button or a new status.
 // ---------------------------------------------------------------------------
 static String statusText = "Ready";
 static bool   taskRunning = false;   // the app said a task is running: front button = Stop
@@ -544,48 +560,132 @@ static const uint32_t SCREEN_ON_MS = 60000;
 
 static void wakeScreen() { screenOnUntil = millis() + SCREEN_ON_MS; }
 
+// Mantiza's colours (apps/mantiza/Sources/MantizaKit/Theme.swift), as RGB565.
+static constexpr uint16_t rgb(uint8_t r, uint8_t g, uint8_t b) {
+  return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+}
+static const uint16_t M_INK     = rgb(0x0D, 0x0A, 0x12);
+static const uint16_t M_LINE    = rgb(0x2A, 0x23, 0x33);
+static const uint16_t M_TEXT    = rgb(0xEE, 0xEA, 0xF4);
+static const uint16_t M_DIM     = rgb(0x8A, 0x83, 0x94);
+static const uint16_t M_MAGENTA = rgb(0xD7, 0x01, 0xA5);
+static const uint16_t M_GREEN   = rgb(0x02, 0xF3, 0x4C);
+static const uint16_t M_MAGENTA_DIM = rgb(0x45, 0x08, 0x37);
+static const uint16_t M_GREEN_DIM   = rgb(0x0A, 0x4A, 0x20);
+
+// The pixel art from images/o1-gridded.svg and images/o6-lockup.svg (M magenta, G green).
+static const char* HEAD[] = {
+  "G..........G",
+  ".G........G.",
+  "..G......G..",
+  "MMMMMMMMMMMM",
+  "MGGMMMMMMGGM",
+  "MGGMMMMMMGGM",
+  ".MMMMMMMMMM.",
+  "..MMMMMMMM..",
+  "...MMMMMM...",
+  "....MMMM....",
+  ".....MM.....",
+};
+static const char* WORDMARK[] = {  // M A N T I Z A, 5 x 7 letters, the Z green
+  "M...M..MMM..M...M.MMMMM..MMM..GGGGG..MMM.",
+  "MM.MM.M...M.MM..M...M.....M.......G.M...M",
+  "M.M.M.M...M.M.M.M...M.....M......G..M...M",
+  "M.M.M.MMMMM.M..MM...M.....M.....G...MMMMM",
+  "M...M.M...M.M...M...M.....M....G....M...M",
+  "M...M.M...M.M...M...M.....M...G.....M...M",
+  "M...M.M...M.M...M...M....MMM..GGGGG.M...M",
+};
+
+static M5Canvas canvas(&M5.Display);
+static uint32_t lastBlink = 0;
+
+// One grid of square pixels. scanRow: that row is drawn bright (-1 = none); eyesShut: green
+// cells in rows 4-5 (the eyes) are drawn magenta.
+static void drawGrid(const char* const* rows, int nRows, int x, int y, int cell, int gap,
+                     bool dim, int scanRow = -1, bool eyesShut = false) {
+  for (int r = 0; r < nRows; r++) {
+    for (int c = 0; rows[r][c]; c++) {
+      char ch = rows[r][c];
+      if (ch == '.') continue;
+      bool green = ch == 'G' && !(eyesShut && (r == 4 || r == 5));
+      uint16_t col = green ? (dim ? M_GREEN_DIM : M_GREEN) : (dim ? M_MAGENTA_DIM : M_MAGENTA);
+      if (r == scanRow) col = green ? M_TEXT : rgb(0xFF, 0x6A, 0xD8);
+      canvas.fillRect(x + c * cell, y + r * cell, cell - gap, cell - gap, col);
+    }
+  }
+}
+
+// "■ IPHONE ............ LINKED"
+static void drawLight(int y, const char* name, bool on, const char* onText, const char* offText) {
+  canvas.fillRect(6, y, 6, 6, on ? M_GREEN : M_MAGENTA);
+  canvas.setTextColor(M_DIM);
+  canvas.setTextDatum(top_left);
+  canvas.drawString(name, 18, y - 1);
+  canvas.setTextColor(on ? M_GREEN : M_DIM);
+  canvas.setTextDatum(top_right);
+  canvas.drawString(on ? onText : offText, 129, y - 1);
+}
+
 static void drawScreen() {
-  auto& d = M5.Display;
-  d.startWrite();
-  d.fillScreen(TFT_BLACK);
+  uint32_t now = millis();
+  canvas.fillScreen(M_INK);
+  canvas.setTextFont(1);   // the built-in 6 x 8 pixel font
+  canvas.setTextSize(1);
 
-  d.setTextSize(2);
-  d.setTextColor(TFT_CYAN, TFT_BLACK);
-  d.setCursor(4, 6);
-  d.print("Mantiza");
-  d.setTextSize(1);
-  d.setTextColor(TFT_WHITE, TFT_BLACK);
-  d.setCursor(104, 12);
-  d.printf("%d%%", (int)M5.Power.getBatteryLevel());
+  // Battery, top right
+  canvas.setTextColor(M_DIM);
+  canvas.setTextDatum(top_right);
+  canvas.drawString(String((int)M5.Power.getBatteryLevel()) + "%", 129, 4);
 
-  d.setCursor(4, 34);
-  d.setTextColor(connected ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
-  d.print(connected ? "iPhone: connected" : "iPhone: waiting...");
-  d.setCursor(4, 48);
-  d.setTextColor(appLinked ? TFT_GREEN : TFT_DARKGREY, TFT_BLACK);
-  d.print(appLinked ? "App: ready" : "App: not open");
+  // The head: dim without an iPhone, a scan line while working, a blink every few seconds
+  int scan = taskRunning ? (int)((now / 90) % 14) - 1 : -1;      // rows -1..12, a short pause off the head
+  bool blink = !taskRunning && connected && now - lastBlink < 140;
+  drawGrid(HEAD, 11, 25, 16, 7, 1, !connected, scan, blink);
+  drawGrid(WORDMARK, 7, 6, 102, 3, 0, !connected);
 
-  // What Mantiza is doing, wrapped at 21 characters, up to 8 lines
-  d.setTextColor(TFT_WHITE, TFT_BLACK);
-  int y = 74;
+  canvas.drawFastHLine(6, 132, 123, M_LINE);
+  drawLight(140, "IPHONE", connected, "LINKED", "WAITING");
+  drawLight(154, "APP", appLinked, "READY", "NOT OPEN");
+  canvas.drawFastHLine(6, 166, 123, M_LINE);
+
+  // What Mantiza is doing, wrapped at 20 characters
+  canvas.setTextDatum(top_left);
+  canvas.setTextColor(M_TEXT);
+  int y = 174, last = taskRunning ? 206 : 228;
   String rest = statusText;
-  while (rest.length() > 0 && y < 200) {
-    int cut = rest.length() <= 21 ? rest.length() : rest.lastIndexOf(' ', 21);
-    if (cut <= 0) cut = min((int)rest.length(), 21);
-    d.setCursor(4, y);
-    d.print(rest.substring(0, cut));
+  bool first = true;
+  while (rest.length() > 0 && y <= last) {
+    int cut = rest.length() <= 20 ? rest.length() : rest.lastIndexOf(' ', 20);
+    if (cut <= 0) cut = min((int)rest.length(), 20);
+    canvas.drawString((first ? "> " : "  ") + rest.substring(0, cut), 6, y);
     rest = rest.substring(cut);
     rest.trim();
-    y += 15;
+    first = false;
+    y += 11;
   }
 
-  if (taskRunning) {
-    d.fillRect(0, 216, 135, 24, TFT_RED);
-    d.setTextColor(TFT_WHITE, TFT_RED);
-    d.setCursor(13, 224);
-    d.print("Front button: STOP");
+  if (taskRunning) {   // the front button stops the task
+    canvas.fillRect(0, 218, 135, 22, M_MAGENTA);
+    canvas.setTextColor(M_INK);
+    canvas.setTextDatum(middle_center);
+    canvas.drawString("FRONT BUTTON = STOP", 67, 229);
   }
-  d.endWrite();
+  canvas.pushSprite(0, 0);
+}
+
+// Redraw for the head's movement: ~11 frames a second while a task runs, a blink every 4.5 s
+// when idle; nothing while the screen is off.
+static bool animationDue() {
+  if (!screenOn) return false;
+  static uint32_t lastFrame = 0;
+  uint32_t now = millis();
+  if (taskRunning && now - lastFrame >= 90) { lastFrame = now; return true; }
+  if (!taskRunning && connected) {
+    if (now - lastBlink >= 4500) { lastBlink = now; return true; }        // shut the eyes
+    if (now - lastBlink >= 140 && lastFrame < lastBlink + 140) { lastFrame = now; return true; }  // open them
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +711,7 @@ static void printHelp() {
     "  tap <x> <y>        same, then click\n"
     "  drag <x1> <y1> <x2> <y2>  press, slide, let go (absolute build; 0..32767)\n"
     "  share              open the Mantiza app and ask it to share the screen\n"
+    "  keyhold <name> <ms> hold a special key (e.g. keyhold siri 800)\n"
     "  key <name> [n]     special key: home lock screenshot brighter dimmer louder softer mute\n"
     "                     playpause next previous siri spotlight globe keyboard focus, or 0x....\n"
     "  status <text>      show what Mantiza is doing (no reply)\n"
@@ -663,6 +764,12 @@ static void handleCommand(String line, bool fromApp = false) {
     reply("ok " + line, fromApp);
     return;
   }
+  if (wordIs(line, "keyhold")) {
+    if (!connected) { reply("not connected to the iPhone yet", fromApp); return; }
+    if (!holdSpecialKey(line.substring(7))) { reply("error " + line, fromApp); return; }
+    reply("ok " + line, fromApp);
+    return;
+  }
   if (wordIs(line, "key")) {
     if (!connected) { reply("not connected to the iPhone yet", fromApp); return; }
     if (!pressSpecialKey(line.substring(3))) { reply("error " + line, fromApp); return; }
@@ -710,6 +817,9 @@ void setup() {
   Serial.begin(115200);
   M5.Display.setRotation(0);
   M5.Display.setBrightness(80);
+  canvas.setColorDepth(16);
+  canvas.setPsram(true);
+  canvas.createSprite(M5.Display.width(), M5.Display.height());
 
   appQueue = xQueueCreate(16, sizeof(AppCommand));
   setupBluetooth();
@@ -769,6 +879,7 @@ void loop() {
     redraw = true;
   }
 
+  if (animationDue()) redraw = true;
   if (redraw) drawScreen();
   delay(10);
 }

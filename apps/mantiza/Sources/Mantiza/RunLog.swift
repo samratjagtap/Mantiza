@@ -33,6 +33,7 @@ final class RunLog {
     private var current: Run?
     private var images: [String: Data] = [:]
     private var flushing = false
+    private(set) var lastError: String?  // the last report the PC refused
 
     private var folder: URL {
         let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("runs")
@@ -107,14 +108,17 @@ final class RunLog {
             for f in (try? fm.contentsOfDirectory(atPath: dir.path)) ?? [] where f.hasSuffix(".jpg") {
                 files[f] = (try? Data(contentsOf: dir.appendingPathComponent(f)))?.base64EncodedString()
             }
-            var req = URLRequest(url: url, timeoutInterval: 20)
+            var req = URLRequest(url: url, timeoutInterval: 60)  // big reports, slow Wi-Fi
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.setValue(Secrets.debugToken, forHTTPHeaderField: "X-Mantiza-Token")
             req.httpBody = try? JSONSerialization.data(withJSONObject: ["run": run, "images": files])
-            guard let (_, response) = try? await URLSession.shared.data(for: req),
-                  (response as? HTTPURLResponse)?.statusCode == 200 else { return }  // PC not reachable: try later
-            fm.createFile(atPath: sent.path, contents: nil)
+            // PC not reachable: stop, try later. The PC answered but refused this one: skip it, so one
+            // bad report can't hold back all the later ones.
+            guard let (_, response) = try? await URLSession.shared.data(for: req) else { return }
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            if code == 200 { fm.createFile(atPath: sent.path, contents: nil) }
+            else { lastError = "PC refused a report (\(code))" }
         }
     }
 }

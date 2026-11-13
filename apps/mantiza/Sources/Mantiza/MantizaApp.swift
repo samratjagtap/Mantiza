@@ -13,17 +13,17 @@ struct MantizaApp: App {
     @State private var booting = true
 
     init() {
-        // Sharp, dark tab bar in Mantiza's colours.
+        // A quiet dark tab bar: grey items, the selected one white.
         let bar = UITabBarAppearance()
         bar.configureWithOpaqueBackground()
         bar.backgroundColor = UIColor(Theme.ink)
         bar.shadowColor = UIColor(Theme.line)
         let item = bar.stackedLayoutAppearance
-        let font = UIFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
+        let font = UIFont.systemFont(ofSize: 10, weight: .medium)
         item.normal.iconColor = UIColor(Theme.dim)
         item.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.dim), .font: font]
-        item.selected.iconColor = UIColor(Theme.green)
-        item.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.green), .font: font]
+        item.selected.iconColor = UIColor(Theme.text)
+        item.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.text), .font: font]
         UITabBar.appearance().standardAppearance = bar
         UITabBar.appearance().scrollEdgeAppearance = bar
     }
@@ -32,11 +32,11 @@ struct MantizaApp: App {
         WindowGroup {
             ZStack {
                 TabView(selection: $tab) {
-                    TaskView(request: $request).tag(0).tabItem { Label("TASK", systemImage: "square.grid.3x3.fill") }
-                    DeviceView().tag(1).tabItem { Label("DEVICE", systemImage: "cursorarrow.rays") }
-                    LogView().tag(2).tabItem { Label("LOG", systemImage: "text.alignleft") }
+                    TaskView(request: $request).tag(0).tabItem { Label("Task", systemImage: "sparkles") }
+                    DeviceView().tag(1).tabItem { Label("Device", systemImage: "dot.radiowaves.left.and.right") }
+                    LogView().tag(2).tabItem { Label("Log", systemImage: "list.bullet") }
                 }
-                .tint(Theme.green)
+                .tint(Theme.text)
 
                 if booting {
                     BootView().transition(.opacity)
@@ -58,11 +58,14 @@ struct MantizaApp: App {
                 agent.pointer = pointer
                 agent.approvals.setUp()
                 Net.start()
+                let old = Direct.removeOldClockAlarms()
+                if old > 0 { link.note("Removed \(old) old Mantiza alarm\(old == 1 ? "" : "s") (alarms now go into the Clock app)") }
                 link.onShare = { [weak pointer = pointer] in Task { _ = await pointer?.startSharing() } }
                 link.onStop = { [weak agent = agent] in agent?.stop() }
                 Task {
-                    try? await Task.sleep(for: .milliseconds(1400))
-                    withAnimation(.easeOut(duration: 0.35)) { booting = false }
+                    // The head blinks twice (BootView), then straight into the app.
+                    try? await Task.sleep(for: .milliseconds(850))
+                    withAnimation(.easeOut(duration: 0.2)) { booting = false }
                 }
             }
             // The widget's buttons: mantiza://run?q=... runs that task, mantiza://new opens the Task tab.
