@@ -69,8 +69,7 @@ class Handler(BaseHTTPRequestHandler):
         # at all and what it was told (403 wrong token, 413 too big, 400 bad report).
         try:
             with (RUNS / "inbox.log").open("a", encoding="utf-8") as f:
-                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {self.client_address[0]} {fmt % args}
-")
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {self.client_address[0]} {fmt % args}\n")
         except OSError:
             pass
 
