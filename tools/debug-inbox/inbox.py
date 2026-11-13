@@ -64,8 +64,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._answer(400, f"bad report: {e}")
         self._answer(200, "saved")
 
-    def log_message(self, fmt, *args):  # quiet (runs without a window)
-        pass
+    def log_message(self, fmt, *args):
+        # No window, so every request goes to runs/inbox.log: shows whether the phone reaches the PC
+        # at all and what it was told (403 wrong token, 413 too big, 400 bad report).
+        try:
+            with (RUNS / "inbox.log").open("a", encoding="utf-8") as f:
+                f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {self.client_address[0]} {fmt % args}
+")
+        except OSError:
+            pass
 
 
 if __name__ == "__main__":
