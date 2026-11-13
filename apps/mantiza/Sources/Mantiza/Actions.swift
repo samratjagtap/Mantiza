@@ -324,6 +324,9 @@ enum Direct {
         "notes": "mobilenotes://", "music": "music://", "maps": "maps://", "photos": "photos-redirect://",
         "calendar": "calshow://", "reminders": "x-apple-reminderapp://", "shortcuts": "shortcuts://",
         "files": "shareddocuments://", "podcasts": "podcasts://", "appstore": "itms-apps://", "mail": "message://",
+        // Clock: the link opens the Alarms tab. It can't set an alarm, but opening Clock this way skips
+        // Home + Search (7.8 s and 14.5 s in debug runs 2026-11-13_143418 and _135928).
+        "clock": "clock-alarm://",
     ]
 
     static func appLink(_ app: String) -> URL? {
