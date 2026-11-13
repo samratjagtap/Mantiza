@@ -453,26 +453,43 @@ final class Agent: ObservableObject {
     /// Opens an app by name: its own link when Mantiza is on screen (instant and exact), otherwise
     /// Search from the Home Screen, then a check that the app really opened (debug runs
     /// 2026-11-10_112947 and _113142: Search left the phone on the Home Screen and nothing noticed).
+    /// Mantiza is on screen, or about to be. Right after Apple's share sheet closes, iOS keeps Mantiza
+    /// "inactive" for a moment; treating that as "not on screen" sent every task that had just started
+    /// screen sharing through Home + Search (Instagram 7.1 s, Clock 7.8 s and 14.5 s, where a link
+    /// takes about 1 s).
+    private func inFront(within limit: Double = 1.5) async -> Bool {
+        let until = Date().addingTimeInterval(limit)
+        while UIApplication.shared.applicationState != .active {
+            if UIApplication.shared.applicationState == .background || Date() > until { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
+    }
+
+    /// Opens the app by its own link (only works while Mantiza is on screen). Waits until the app has
+    /// taken over instead of a fixed 1.2 s.
+    private func openByLink(_ app: String, since t: Date) async -> Bool {
+        guard let url = Direct.appLink(app), await inFront(), await Direct.open(url) else { return false }
+        for _ in 0..<40 where UIApplication.shared.applicationState != .background {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        try? await Task.sleep(for: .milliseconds(450))  // its first screen draws
+        add("Opened \(app) (\(seconds(since: t)), app link)")
+        return true
+    }
+
     @discardableResult
     private func open(app: String) async -> Bool {
         guard let link else { return false }
         status = "Opening \(app)…"
         let t = Date()
-        if UIApplication.shared.applicationState == .active, let url = Direct.appLink(app), await Direct.open(url) {
-            try? await Task.sleep(for: .milliseconds(1200))
-            add("Opened \(app) (\(seconds(since: t)), app link)")
-            return true
-        }
+        if await openByLink(app, since: t) { return true }
         // Search can land anywhere (an offloaded app, a web result): without the screen, "opened"
         // can't be checked (debug runs 2026-11-12_134120.._134250 said "Opened" unchecked). Screen
         // sharing first; it stays on, and with Mantiza in front the app's own link may work too.
         if let capture, !capture.running {
             guard await startEyes() else { return false }
-            if let url = Direct.appLink(app), await Direct.open(url) {
-                try? await Task.sleep(for: .milliseconds(1200))
-                add("Opened \(app) (\(seconds(since: t)), app link)")
-                return true
-            }
+            if await openByLink(app, since: t) { return true }
         }
         for attempt in 1...2 {
             await goHome()
@@ -535,7 +552,7 @@ final class Agent: ObservableObject {
 
     /// Links and the torch only work while Mantiza is on screen. If it isn't, the device opens it.
     private func bringMantizaForward() async -> Bool {
-        if UIApplication.shared.applicationState == .active { return true }
+        if await inFront() { return true }
         guard let link else { return false }
         await link.run("k cmd+space")
         try? await Task.sleep(for: .milliseconds(700))
