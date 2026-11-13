@@ -1149,6 +1149,27 @@ final class Agent: ObservableObject {
                     return true
                 }
             }
+            // Add Alarm is open and the time isn't set yet: Mantiza sets it itself, without waiting for
+            // the AI to choose "type" (debug run 2026-11-13_195417: the AI tapped wheel digits 16 times).
+            // Only on Add Alarm, never Edit Alarm (that would change an existing alarm).
+            if wantAmPm != nil, !typed, let text = task.text, let ampm = wantAmPm {
+                let words = Set(items.map { Words.norm($0.text) })
+                if words.contains("add alarm"), words.contains("am"), words.contains("pm") {
+                    status = "Step \(n): setting the time…"
+                    if await setClockTime(digits: text, ampm: ampm) {
+                        typed = true
+                        history.append("Mantiza set the time to \(text.prefix(2)):\(text.suffix(2)) \(ampm) on the wheels: don't touch the wheels again")
+                        add("Step \(n): time set to \(text.prefix(2)):\(text.suffix(2)) \(ampm) (checked on screen)")
+                    } else {
+                        typeTries += 1
+                        if typeTries >= 2 { end("❌ Couldn't set the time on Clock's wheels"); return false }
+                        add("Step \(n): couldn't set the time yet")
+                    }
+                    lastLabel = ""
+                    lastScreen = ""
+                    continue
+                }
+            }
             closeStep(items)  // what the last step changed
             guard let marked = Marks.numbered(frame, items: items), let plain = Marks.plain(frame) else {
                 end("❌ Couldn't prepare the screenshot"); return false
