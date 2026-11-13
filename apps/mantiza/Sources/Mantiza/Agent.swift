@@ -1112,6 +1112,9 @@ final class Agent: ObservableObject {
         screenVerified = true
         for n in 1...maxSteps {
             if stopRequested { end("⏹ Stopped"); return false }
+            // Screen sharing was turned off (by the user or iOS): Mantiza can't see, so it must not tap.
+            if !capture.running { end("⏹ Screen sharing stopped, so the task stopped (nothing more was tapped)"); return false }
+            let stepStart = Date()
             // Mantiza itself is on screen (the user opened it, e.g. to press Stop): never act on
             // Mantiza's own screen (debug run 2026-11-10_193835: the AI tapped Mantiza's Device tab).
             if UIApplication.shared.applicationState == .active {
@@ -1299,6 +1302,16 @@ final class Agent: ObservableObject {
                 }
             }
             guard let tapAt = point else { end("❌ Nothing to tap"); return false }
+            // A step normally takes seconds (at most ~90 s with two slow brain calls). Much longer means
+            // iOS paused Mantiza in the background, and the user has moved on: tapping now would act on
+            // whatever they're doing (debug run 2026-11-13_174443: paused 10 min on 4G, then tapped
+            // "Chrome" and "back" in the user's Settings).
+            let stepTook = Date().timeIntervalSince(stepStart)
+            if stepTook > 150 {
+                end("⏹ iOS paused Mantiza for \(Int(stepTook / 60)) min (\(conditions())), so the task stopped instead of tapping on whatever is on screen now. Try again on Wi-Fi.")
+                return false
+            }
+            if !capture.running { end("⏹ Screen sharing stopped, so the task stopped (nothing more was tapped)"); return false }
 
             // Safety: ask before anything risky
             if task.needs_approval == true, isRisky(label) {
