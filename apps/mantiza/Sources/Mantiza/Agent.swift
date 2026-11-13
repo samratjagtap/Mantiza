@@ -107,7 +107,11 @@ final class Agent: ObservableObject {
             link.connect()
             for _ in 0..<40 where !link.ready { try? await Task.sleep(for: .milliseconds(100)) }
         }
-        guard link.ready else { end("❌ Device not connected (Device tab)"); return }
+        guard link.ready else {
+            end(link.bluetooth == "On" ? "❌ Device not connected (Device tab)"
+                                       : "❌ Bluetooth is \(link.bluetooth.lowercased()) on this iPhone: turn it on so the device can connect")
+            return
+        }
         guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
         guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
 
@@ -204,8 +208,8 @@ final class Agent: ObservableObject {
             let label = step.text.map { " Label: \"\($0)\"." } ?? ""
             let task = Subtask(app: "Clock",
                                goal: "Add a NEW alarm in the Clock app: open the Alarms tab, tap +. Set the time to \(clock.shown): "
-                                   + "tap the time wheels once and type \(clock.digits) on the keyboard (a Bluetooth keyboard is connected); "
-                                   + "Mantiza sets \(clock.ampm) itself. \(repeatText)\(label) Then tap the check mark (top right) to save. "
+                                   + "when the Add Alarm screen shows, choose \"type\": Mantiza enters the time and \(clock.ampm) itself. "
+                                   + "\(repeatText)\(label) Then tap the check mark (top right) to save, once. "
                                    + "Done only when the Alarms list shows \(clock.short). Never change or delete any other alarm.",
                                text: clock.digits, success_text: clock.short, needs_approval: false, max_steps: 16)
             wantAmPm = clock.ampm
@@ -214,6 +218,10 @@ final class Agent: ObservableObject {
             // Only say it's set when Clock's list really shows it (read on the phone, no AI).
             guard await screenShows(clock.short, within: 3) else {
                 end("❌ The alarm isn't confirmed: \(clock.short) doesn't show in Clock's alarm list"); return false
+            }
+            if !days.isEmpty, !(await daysShow(days)) {
+                end("❌ The alarm isn't confirmed: Clock's list doesn't show it repeating on " + days.map(\.capitalized).joined(separator: ", "))
+                return false
             }
             add("⏰ Alarm \(clock.shown)" + (days.isEmpty ? "" : ", " + days.map(\.capitalized).joined(separator: ", ")) + " added in the Clock app")
             return true
@@ -396,6 +404,50 @@ final class Agent: ObservableObject {
         let ampm = p[0] < 12 ? "AM" : "PM"
         let short = String(format: "%d:%02d", h12, p[1])
         return (short + " " + ampm, short, String(format: "%02d%02d", h12, p[1]), ampm)
+    }
+
+    /// Sets Clock's time wheels: taps the hour in the wheels' middle row (level with the bigger of
+    /// AM/PM), types the digits, reads the row back, then sets AM/PM.
+    private func setClockTime(digits: String, ampm: String) async -> Bool {
+        guard let capture, let pointer, digits.count == 4 else { return false }
+        let wantHour = Int(digits.prefix(2)) ?? -1, wantMin = Int(digits.suffix(2)) ?? -1
+        func middleRow(_ items: [ScreenItem]) -> (hour: ScreenItem, minute: ScreenItem)? {
+            guard let am = items.first(where: { Words.norm($0.text) == "am" }),
+                  let pm = items.first(where: { Words.norm($0.text) == "pm" }) else { return nil }
+            let sel = am.box.height > pm.box.height ? am : pm
+            let row = items.filter { $0.text.allSatisfy(\.isNumber) && !$0.text.isEmpty
+                && abs($0.center.y - sel.center.y) < sel.box.height * 0.6 && $0.center.x < sel.center.x }
+                .sorted { $0.center.x < $1.center.x }
+            guard row.count >= 2 else { return nil }
+            return (row[0], row[1])
+        }
+        await capture.waitForSettle(quiet: 0.3, maxWait: 1.5)
+        guard let frame = capture.latestImage(), let row = middleRow(await ScreenReader.read(frame)) else {
+            add("Clock's time wheels aren't on screen"); return false
+        }
+        if Int(row.hour.text) != wantHour || Int(row.minute.text) != wantMin {
+            guard await pointer.tap(toScreen(row.hour.center, frame: frame)) else { return false }
+            try? await Task.sleep(for: .milliseconds(600))
+            await type(digits)
+            try? await Task.sleep(for: .milliseconds(500))
+            await capture.waitForSettle(quiet: 0.3, maxWait: 1.5)
+            guard let after = capture.latestImage(), let now = middleRow(await ScreenReader.read(after)),
+                  Int(now.hour.text) == wantHour, Int(now.minute.text) == wantMin else {
+                add("Typed \(digits), but the wheels don't show \(wantHour):\(String(format: "%02d", wantMin))"); return false
+            }
+        }
+        return await setAmPm(ampm)
+    }
+
+    /// Clock's list shows the repeat days under the time ("Mon, Tue, Wed, Thu, and Fri").
+    private func daysShow(_ days: [String]) async -> Bool {
+        guard let capture, let frame = capture.latestImage() else { return false }
+        let short = days.map { String($0.prefix(3)).lowercased() }
+        return await ScreenReader.read(frame).contains { item in
+            let t = item.text.lowercased()
+            return short.allSatisfy { t.contains($0) } || (short.count == 5 && t.contains("weekdays"))
+                || (short.count == 7 && t.contains("every day"))
+        }
     }
 
     /// Clock's AM/PM wheel can't be typed and ignores taps on the other row (debug run
@@ -912,6 +964,16 @@ final class Agent: ObservableObject {
             guard let frame = capture.latestImage() else { end("❌ No screen image"); return false }
             t = Date()
             let items = await ScreenReader.read(frame)
+            // An alarm whose time Mantiza set is saved once Clock's Alarms list is back: stop here and
+            // let the final check read the list (debug runs 2026-11-13_155827 and _170409 tapped + again
+            // and added more alarms).
+            if wantAmPm != nil, typed {
+                let words = Set(items.map { Words.norm($0.text) })
+                if words.contains("alarms"), !words.contains("add alarm"), !words.contains("edit alarm") {
+                    add("Alarm saved: back on Clock's list")
+                    return true
+                }
+            }
             closeStep(items)  // what the last step changed
             guard let marked = Marks.numbered(frame, items: items), let plain = Marks.plain(frame) else {
                 end("❌ Couldn't prepare the screenshot"); return false
@@ -971,6 +1033,24 @@ final class Agent: ObservableObject {
                 let check = task.success_text.flatMap { s in items.contains { $0.text.localizedCaseInsensitiveContains(s) } ? "✓ \"\(s)\" on screen" : nil }
                 add("Step \(n): done (\(String(format: "%.0f%%", action.confidence * 100)) sure\(check.map { ", " + $0 } ?? ""))", image: shot)
                 return true
+            case "type" where action.confidence >= 0.4 && wantAmPm != nil:
+                // Clock's time wheels (debug run 2026-11-13_155200: the AI typed the time into the
+                // Label field). Mantiza finds the wheel's middle row itself and checks what it reads.
+                guard let text = task.text, let ampm = wantAmPm else { break }
+                status = "Step \(n): setting the time…"
+                if await setClockTime(digits: text, ampm: ampm) {
+                    typed = true
+                    history.append("Mantiza set the time to \(text.prefix(2)):\(text.suffix(2)) \(ampm) on the wheels: don't touch the wheels again")
+                    add("Step \(n): time set to \(text.prefix(2)):\(text.suffix(2)) \(ampm) (checked on screen)", image: shot)
+                } else {
+                    typeTries += 1
+                    if typeTries >= 2 { end("❌ Couldn't set the time on Clock's wheels"); return false }
+                    history.append("the time could not be set yet: make sure the Add Alarm screen with the time wheels is open")
+                    add("Step \(n): couldn't set the time yet", image: shot)
+                }
+                lastLabel = ""
+                lastScreen = ""
+                continue
             case "type" where action.confidence >= 0.4:
                 guard let text = task.text else { break }
                 // 1. Tap into the text field (the big brain finds it: it often has no text, or only a
@@ -991,7 +1071,7 @@ final class Agent: ObservableObject {
                 await capture.waitForSettle()
                 // Digits typed into a time wheel show as "7" and "00", not "0700": can't be read back;
                 // the final check (Clock's list) confirms the result instead.
-                let shown = text.allSatisfy(\.isNumber) ? true : await textShows(text)
+                let shown = await textShows(text)
                 typeTries += 1
                 if shown {
                     typed = true
@@ -999,9 +1079,6 @@ final class Agent: ObservableObject {
                              label: "", items: items, frame: frame, text: text, what: "type into \(field.what)")
                     history.append("tapped the text field and typed \"\(text)\" (it shows in the field; not sent yet)")
                     add("Step \(n): typed \"\(text)\" into \"\(field.what)\" (\(seconds(since: t)))", image: shot)
-                    if let want = wantAmPm, text.allSatisfy(\.isNumber) {
-                        if await setAmPm(want) { history.append("the time is set, \(want) included: don't touch the wheels again") }
-                    }
                 } else if typeTries >= 2 {
                     end("❌ Typed twice, but the text doesn't show on screen"); return false
                 } else {

@@ -327,6 +327,11 @@ enum Direct {
         // Clock: the link opens the Alarms tab. It can't set an alarm, but opening Clock this way skips
         // Home + Search (7.8 s and 14.5 s in debug runs 2026-11-13_143418 and _135928).
         "clock": "clock-alarm://",
+        // More everyday apps (debug run 2026-11-13_172601: Airbnb went through Search). A link that
+        // doesn't work just falls back to Search.
+        "airbnb": "airbnb://", "zomato": "zomato://", "swiggy": "swiggy://", "amazon": "com.amazon.mobile.shopping://",
+        "discord": "discord://", "slack": "slack://", "teams": "msteams://", "outlook": "ms-outlook://",
+        "googledrive": "googledrive://", "googlephotos": "googlephotos://", "primevideo": "aiv://",
     ]
 
     static func appLink(_ app: String) -> URL? {
