@@ -58,6 +58,8 @@ struct MantizaApp: App {
                 agent.pointer = pointer
                 agent.approvals.setUp()
                 Net.start()
+                let old = Direct.removeOldClockAlarms()
+                if old > 0 { link.note("Removed \(old) old Mantiza alarm\(old == 1 ? "" : "s") (alarms now go into the Clock app)") }
                 link.onShare = { [weak pointer = pointer] in Task { _ = await pointer?.startSharing() } }
                 link.onStop = { [weak agent = agent] in agent?.stop() }
                 Task {

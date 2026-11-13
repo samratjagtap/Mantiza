@@ -261,6 +261,9 @@ final class BigBrain {
                "Same kind" means the same action on the same kind of thing: "watch stories" (other people's) is NOT
                "open my story", "play liked songs" is NOT "play a playlist". When unsure, give a new name.
                A screen step opens its own app: don't put an open_app step for the same app before it.
+               open_app is only for real app names. Something to open INSIDE an app (a course, section, chat,
+               playlist, e.g. "open gregmat and vocab mountain") is a screen step in that app. Never drop a part of
+               the request, and the reply must promise only what the steps do.
           values: {"person": "...", ...}: the specific values for the routine's blanks ("text" is filled in automatically).
         KNOWN ROUTINES (learned before; reusing one makes the task fast): \(known.isEmpty ? "none" : known.map { "\"\($0)\"" }.joined(separator: ", "))
 
