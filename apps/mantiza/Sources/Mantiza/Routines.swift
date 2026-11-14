@@ -19,7 +19,7 @@ struct Routine: Codable, Identifiable {
 }
 
 struct RoutineStep: Codable {
-    enum Kind: String, Codable { case tap, type, scroll }
+    enum Kind: String, Codable { case tap, type, scroll, scrollUp, longPress, swipeLeft, swipeRight, back }
     var kind: Kind
     var before: [String]      // words on screen before the step
     var label: String         // words of what is tapped ("" for icons and switches); may be "{person}"
@@ -32,6 +32,7 @@ struct RoutineStep: Codable {
     var appear: [String]      // words that appeared after the step
     var vanish: [String]      // words that went away after the step
     var what: String          // for the log
+    var enter: Bool? = nil    // type: press Return after typing (a search box)
 }
 
 /// Learned routines, kept in a file on the phone.
