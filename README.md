@@ -2,7 +2,28 @@
 
 Mantiza is an **iPhone app** with an AI agent inside it. You tell it what you want by **voice or text**, and it gets it done across your phone: opening apps, jumping straight to the right screen, running multi-step workflows, and answering back. Its home screen widget learns your daily, weekly and monthly patterns and puts the workflows you are most likely to want right now one tap away.
 
-This repo currently holds the planning docs. Mantiza uses Google's [Artemis](https://github.com/google/artemis) as its baseline, so there is a doc set for each.
+This repo holds the app, the device firmware and the planning docs. Mantiza uses Google's [Artemis](https://github.com/google/artemis) as its baseline, so there is a doc set for each.
+
+## What's built (as of 2026-11-16)
+
+"Built" means the code is in the [app](apps/mantiza/README.md) and installs on the iPhone. Items marked *to check* haven't been confirmed in a real run on the phone yet.
+
+| Area | What Mantiza does | State |
+|---|---|---|
+| **Siri's jobs go to Siri** | Alarms, timers, phone settings, weather, notes, music: the StickS3 holds the Siri key, types the request and reads Siri's answer ([research](Docs/Mantiza%20Roadmap/siri-ios27-research.md)) | Built; the hand-off was tested by hand, the app doing it alone is *to check* |
+| **Direct iOS routes** | Calls, WhatsApp, SMS, email, directions, calendar, reminders, flashlight, brightness, device keys | Built |
+| **AI screen route** | Looks at the screen and acts when nothing else can. Both brains are asked at once; a step should take about 1.5–3 s instead of 6–7 s ([speed research](Docs/Mantiza%20Roadmap/speed-research.md)) | Built; speed is an estimate, *to check* |
+| **Gestures** | Tap, press and hold, type (with Return for search), scroll up and down, swipe left and right, back, several taps from one answer | Built, *to check* |
+| **Learned routines** | A screen task that worked is replayed next time without AI; a repeated request reuses its plan | Built |
+| **Voice in** | Microphone on the Task screen; the Lock Screen widget opens Mantiza listening | Built, *to check* |
+| **Voice out** | Says the result when you asked by voice (Device → Voice) | Built, *to check* |
+| **Live progress** | A Live Activity shows the running task on the Lock Screen and as a banner, with Stop | Built, *to check* |
+| **Habit widget** | The widget and the Task screen offer what you usually ask around this time | Built, *to check* |
+| **Weak internet** | Lighter pictures, one AI call per step, an early and plain "weak internet" stop | Built, *to check* |
+| **"Hey Siri, ask Mantiza", Control Centre button, Shortcuts action** | Written as App Intents | **Not switched on:** iOS needs an index that only a Mac's tool writes; an open-source stand-in is in [tools/appintents](tools/appintents/README.md) but hasn't been run or tested |
+| **Safety** | Asks before paying, buying, deleting or posting; stops instead of tapping when screen sharing is off or iOS paused it | Built |
+
+Details for the newest group (ways in, voice, Live Activity, habits, weak internet): [research note](Docs/Mantiza%20Roadmap/entry-points-voice-live-research.md).
 
 ## Docs
 
