@@ -1,6 +1,6 @@
 # Mantiza: Feature List
 
-_Last updated: 2026-10-26 · Baseline: [Artemis features](../Google%20Artemis%20Analysis/features.md)_
+_Last updated: 2026-11-16 · Baseline: [Artemis features](../Google%20Artemis%20Analysis/features.md)_
 
 **Legend:** 🟢 same as Artemis · 🔵 replaces something Artemis does · _(no marker)_ new to Mantiza. GitHub does not render coloured text, so coloured emoji markers are used.
 
@@ -39,6 +39,31 @@ Priority: **P0** must have for launch, **P1** should have, **P2** nice to have. 
 | 27 | Mac companion full-control mode | 🟢 | Optional: a Mac drives the iPhone via iPhone Mirroring and taps like Artemis, for apps with no intents or links | P2 | 5 | XCUITest dev build |
 | 28 | Indian languages | | Hindi first, then others | P2 | 4 | Cloud STT |
 | 29 | Privacy dashboard | | See and delete everything Mantiza has learned | P1 | 3 | |
+
+### Status of the plan above (2026-11-16)
+
+"Built" = in the app and installed; most of the newest items still need a real run on the iPhone to confirm. The full list with states is in the [README](../../README.md#whats-built-as-of-2026-11-16).
+
+| # | Feature | Status |
+|---|---|---|
+| 1, 2 | Plain-language tasks, text input | Built |
+| 3 | Voice input | Built: microphone on the Task screen, on-phone speech recognition ([note](entry-points-voice-live-research.md)) |
+| 4, 5 | Instant app opener, one-shot deep actions | Built for apps with known links; others open through Search |
+| 6 | Workflows across apps | Built (plan steps run in order) |
+| 10 | Live progress | Built: Live Activity with Stop |
+| 11, 13, 14 | Pattern widget, daily/weekly patterns, one-tap workflows | Built: tasks you usually ask around this time, learned on the phone; monthly patterns not yet |
+| 12 | Widget sizes | Small, medium, large and two Lock Screen sizes; extra-large not yet |
+| 15 | Pattern insights | Not built |
+| 16 | Lock Screen, Control Center, Action Button | Lock Screen widget built; the Control Centre / Action Button control is written but needs the App Intents index |
+| 17 | Siri and Shortcuts integration | Mantiza → Siri built ([research](siri-ios27-research.md)); Siri → Mantiza ("Ask Mantiza") written, needs the App Intents index |
+| 18 | System actions | Built, through Siri and direct iOS routes |
+| 20, 21 | Sensitive-app guard, confirm before risky steps | Confirmation built; a hard block list for banking apps not yet |
+| 24 | Run history | Built: the Log tab and debug reports |
+| 25 | Spoken replies | Built: Apple's voice |
+| 26 | Conversation mode | Not built |
+| 28 | Indian languages | Not built |
+| 29 | Privacy dashboard | Partly: Device tab shows and forgets learned routines and habits |
+| — | Gestures, speed, weak internet (not in the original plan) | Built ([speed research](speed-research.md)) |
 
 ## 2. What Mantiza adds that Artemis does not have
 - Voice input that acts while you are still speaking.

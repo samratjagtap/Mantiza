@@ -64,6 +64,40 @@ final class Pointer: ObservableObject {
         return reply.hasPrefix("ok")
     }
 
+    // MARK: - Gestures (what a finger does besides tapping)
+
+    /// Press and hold at a point (opens menus: copy, delete, react). The device moves there, then
+    /// holds the button for `ms`.
+    func longPress(_ point: CGPoint, ms: Int = 700) async -> Bool {
+        guard let link, await link.confirmDevice(), let (cx, cy) = counts(for: point) else { return false }
+        guard (await link.run("go \(cx) \(cy)")).hasPrefix("ok") else { return false }
+        try? await Task.sleep(for: .milliseconds(60))
+        return (await link.run("l \(ms)")).hasPrefix("ok")
+    }
+
+    /// Scrolls the list or page under a point with the wheel, like two fingers on a trackpad
+    /// (`up` shows what is above). The pointer must be over the thing to scroll: left where the last
+    /// tap was, it could sit on a tab bar and scroll nothing.
+    func scroll(at point: CGPoint, up: Bool) async -> Bool {
+        guard let link, await link.confirmDevice(), let (cx, cy) = counts(for: point) else { return false }
+        guard (await link.run("go \(cx) \(cy)")).hasPrefix("ok") else { return false }
+        return (await link.run("w \(up ? 4 : -4)")).hasPrefix("ok")
+    }
+
+    /// Swipes like a finger from one point to another (next photo, next page, dismiss). Needs the
+    /// device's absolute pointer.
+    func swipe(from a: CGPoint, to b: CGPoint) async -> Bool {
+        guard let link, await link.confirmDevice(), absolute,
+              let (x1, y1) = counts(for: a), let (x2, y2) = counts(for: b) else { return false }
+        return (await link.run("drag \(x1) \(y1) \(x2) \(y2)")).hasPrefix("ok")
+    }
+
+    /// Back one screen: a swipe in from the left edge, the same in every app that supports it.
+    func back() async -> Bool {
+        guard let link, await link.confirmDevice(), absolute else { return false }
+        return (await link.run("drag 0 16384 24000 16384")).hasPrefix("ok")
+    }
+
     // MARK: - Calibration
 
     func startCalibration() {

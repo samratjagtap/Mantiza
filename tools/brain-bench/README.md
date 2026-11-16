@@ -17,6 +17,7 @@ Scripts that ask AI models about real iPhone screens and time each answer, to ch
   - `python bench.py` runs everything: every model at once, for accuracy.
   - `python bench.py marks` runs the numbered-box exam.
   - `python bench.py timing` runs one model at a time, for clean speed.
+- `speed.py`: the speed round (2026-11-15). It calls the app's two brains with the app's own image size and prompts, and compares settings. Results and what they changed: [speed research](../../Docs/Mantiza%20Roadmap/speed-research.md).
 - `rescore.py`: re-marks a saved run after an answer key fix, without calling any models.
 - `screens/`: test screenshots. **Only `picker.jpg` is committed**; other screenshots stay local because they may show private data.
 

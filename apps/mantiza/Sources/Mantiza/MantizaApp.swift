@@ -7,6 +7,8 @@ struct MantizaApp: App {
     @StateObject private var capture = ScreenCapture()
     @StateObject private var pointer = Pointer()
     @StateObject private var agent = Agent()
+    @StateObject private var listener = Listener()
+    @ObservedObject private var inbox = Inbox.shared
     @Environment(\.scenePhase) private var phase
     @State private var tab = 0
     @State private var request = ""
@@ -49,6 +51,8 @@ struct MantizaApp: App {
             .environmentObject(agent)
             .environmentObject(agent.approvals)
             .environmentObject(agent.routines)
+            .environmentObject(listener)
+            .environmentObject(Voice.shared)
             .onAppear {
                 capture.link = link
                 pointer.link = link
@@ -62,24 +66,57 @@ struct MantizaApp: App {
                 if old > 0 { link.note("Removed \(old) old Mantiza alarm\(old == 1 ? "" : "s") (alarms now go into the Clock app)") }
                 link.onShare = { [weak pointer = pointer] in Task { _ = await pointer?.startSharing() } }
                 link.onStop = { [weak agent = agent] in agent?.stop() }
+                // What was said becomes the request and runs at once; its result is spoken.
+                listener.onDone = { text in
+                    request = text
+                    if !agent.running { agent.start(text, byVoice: true) }
+                }
+                handle(inbox.take())  // Siri or a button started the app with something to do
                 Task {
                     // The head blinks twice (BootView), then straight into the app.
                     try? await Task.sleep(for: .milliseconds(850))
                     withAnimation(.easeOut(duration: 0.2)) { booting = false }
                 }
             }
-            // The widget's buttons: mantiza://run?q=... runs that task, mantiza://new opens the Task tab.
+            // Links from the widget, the Lock Screen and the Live Activity: mantiza://run?q=... runs
+            // that task, mantiza://listen opens listening, mantiza://stop stops, mantiza://new opens
+            // the Task tab.
             .onOpenURL { url in
                 tab = 0
                 if let prompt = Shared.prompt(from: url), !prompt.isEmpty {
                     request = prompt
                     if !agent.running { agent.start(prompt) }
+                } else if url == Shared.listenURL {
+                    handle(.listen)
+                } else if url == Shared.stopURL {
+                    handle(.stop)
                 }
             }
+            // Siri ("Ask Mantiza"), the Control Centre button and the Live Activity's Stop button.
+            .onChange(of: inbox.count) { _, _ in handle(inbox.take()) }
             // Development builds: send waiting task reports to the debug inbox on the PC.
             .onChange(of: phase) { _, now in
                 if now == .active { Task { await RunLog.shared.flush() } }
             }
+        }
+    }
+
+    private func handle(_ command: Command?) {
+        guard let command else { return }
+        switch command {
+        case .run(let prompt):
+            let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            tab = 0
+            request = text
+            if !agent.running { agent.start(text, byVoice: true) }  // it came through Siri: answer out loud
+        case .listen:
+            tab = 0
+            if !agent.running, !listener.listening { Task { await listener.start() } }
+        case .stop:
+            listener.finish(run: false)
+            Voice.shared.stopSpeaking()
+            if agent.running { agent.stop() }
         }
     }
 }

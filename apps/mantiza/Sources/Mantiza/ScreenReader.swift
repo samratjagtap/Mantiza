@@ -44,7 +44,7 @@ enum ScreenReader {
 enum Marks {
     /// The frame with a pink numbered box around every text item (numbers sit just above the box,
     /// never over it), as JPEG.
-    static func numbered(_ image: CGImage, items: [ScreenItem]) -> Data? {
+    static func numbered(_ image: CGImage, items: [ScreenItem], quality: CGFloat = 0.7) -> Data? {
         let size = CGSize(width: image.width, height: image.height)
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -68,10 +68,10 @@ enum Marks {
                 label.draw(at: CGPoint(x: tag.minX + 3, y: tag.minY), withAttributes: attrs)
             }
         }
-        return picture.jpegData(compressionQuality: 0.7)
+        return picture.jpegData(compressionQuality: quality)
     }
 
-    static func plain(_ image: CGImage) -> Data? {
-        UIImage(cgImage: image).jpegData(compressionQuality: 0.7)
+    static func plain(_ image: CGImage, quality: CGFloat = 0.7) -> Data? {
+        UIImage(cgImage: image).jpegData(compressionQuality: quality)
     }
 }
