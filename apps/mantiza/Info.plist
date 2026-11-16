@@ -16,6 +16,25 @@
 	<string>Mantiza adds the reminders you ask for.</string>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Mantiza sets the alarms and timers you ask for.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Mantiza listens when you tap the microphone, so you can say what you want done.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Mantiza turns what you say into the request it carries out.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Mantisa</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>man tee za</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Mantis</string>
+		</dict>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Mantiza turns the flashlight on and off when you ask.</string>
 	<key>LSApplicationQueriesSchemes</key>
@@ -45,6 +64,7 @@
 	<array>
 		<string>bluetooth-central</string>
 		<string>screen-capture</string>
+		<string>audio</string>
 	</array>
 </dict>
 </plist>

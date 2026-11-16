@@ -9,7 +9,7 @@ Fast brain (GPT-6 Luna Decisions through OpenRouter, as the app calls it): numbe
 
 Images are sent as the app sends them: 642 px wide, JPEG quality 70.
 Run:  python speed.py            (everything, about $0.25)
-      python speed.py big | fast | sizes | probes
+      python speed.py big | fast | sizes | weak | probes
 Keys GEMINI_API_KEY and OPENROUTER_API_KEY are read from keys.env and never printed.
 """
 import base64
@@ -36,17 +36,17 @@ OPENROUTER = "https://openrouter.ai/api/alpha/decisions"
 _plain = {}
 
 
-def app_jpeg(img: Image.Image) -> bytes:
+def app_jpeg(img: Image.Image, quality: int = 70) -> bytes:
     img = img.convert("RGB").resize((642, round(img.height * 642 / img.width)), Image.LANCZOS)
     buf = io.BytesIO()
-    img.save(buf, "JPEG", quality=70)
+    img.save(buf, "JPEG", quality=quality)
     return buf.getvalue()
 
 
-def plain(screen):
-    if screen not in _plain:
-        _plain[screen] = app_jpeg(Image.open(HERE / "screens" / SCREENS[screen]["file"]))
-    return _plain[screen]
+def plain(screen, quality: int = 70):
+    if (screen, quality) not in _plain:
+        _plain[(screen, quality)] = app_jpeg(Image.open(HERE / "screens" / SCREENS[screen]["file"]), quality)
+    return _plain[(screen, quality)]
 
 
 LOCATE = """This is an iPhone screenshot. Goal: {goal}
@@ -109,13 +109,13 @@ def gemini(session, key, prompt, jpeg, resolution=None):
     return obj, dt, j.get("usageMetadata", {})
 
 
-def run_big(name, prompt, resolution):
+def run_big(name, prompt, resolution, quality=70):
     key = load_key("GEMINI_API_KEY")
     s = requests.Session()
     rows = []
     for screen, goal, accepted in TASKS:
         try:
-            obj, dt, usage = gemini(s, key, prompt.format(goal=goal, typing=""), plain(screen), resolution)
+            obj, dt, usage = gemini(s, key, prompt.format(goal=goal, typing=""), plain(screen, quality), resolution)
             x, y = obj.get("x"), obj.get("y")
             action = obj.get("action", "tap")
             ok = action == "tap" and x is not None and y is not None and hit(screen, accepted, x / 1000, y / 1000)
@@ -202,6 +202,9 @@ def main():
     if what == "sizes":
         jobs += [(run_big, ("decide, medium image", DECIDE, "MEDIA_RESOLUTION_MEDIUM")),
                  (run_big, ("decide, low image", DECIDE, "MEDIA_RESOLUTION_LOW"))]
+    if what == "weak":  # the lighter picture sent on weak internet
+        jobs += [(run_big, ("decide, JPEG quality 45", DECIDE, None, 45)),
+                 (run_big, ("decide, JPEG quality 30", DECIDE, None, 30))]
     if what in ("all", "fast"):
         jobs += [(run_fast, ("luna, detail auto", None)), (run_fast, ("luna, detail low", "low")),
                  (run_fast, ("luna, detail high", "high"))]

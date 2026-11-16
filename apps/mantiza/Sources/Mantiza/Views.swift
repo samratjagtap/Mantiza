@@ -144,13 +144,12 @@ struct TaskView: View {
     @EnvironmentObject var agent: Agent
     @EnvironmentObject var approvals: Approvals
     @EnvironmentObject var link: DeviceLink
+    @EnvironmentObject var listener: Listener
     @Binding var request: String
     @FocusState private var typing: Bool
     @State private var openShot: UUID?
-
-    private let examples = ["Message Azad on WhatsApp: I'm coming", "Set an alarm for 7 AM every weekday",
-                            "Turn on the flashlight", "Remind me to buy milk tomorrow at 9",
-                            "Directions to India Gate"]
+    /// What you usually ask around now first, then recent tasks, then starters.
+    @State private var ideas: [Shared.Suggestion] = []
 
     private var mood: Mood {
         if agent.running { return .working }
@@ -177,6 +176,10 @@ struct TaskView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(Theme.ink.ignoresSafeArea())
+        .onAppear { ideas = Shared.suggestions(count: 5) }
+        .onChange(of: agent.running) { _, running in if !running { ideas = Shared.suggestions(count: 5) } }
+        // While listening, the words appear in the field as they are heard.
+        .onChange(of: listener.heard) { _, heard in if listener.listening { request = heard } }
     }
 
     private var header: some View {
@@ -194,9 +197,9 @@ struct TaskView: View {
     private var hero: some View {
         VStack(spacing: 18) {
             PixelArt(Logo.head, mood: mood).frame(height: 76)
-            Text(agent.status)
+            Text(listener.listening ? "Listening…" : (listener.problem ?? agent.status))
                 .font(Theme.sans(16))
-                .foregroundStyle(mood == .failed ? Theme.magenta : Theme.text)
+                .foregroundStyle(mood == .failed || listener.problem != nil ? Theme.magenta : Theme.text)
                 .multilineTextAlignment(.center)
                 .lineLimit(4)
                 .contentTransition(.opacity)
@@ -218,17 +221,21 @@ struct TaskView: View {
                 .submitLabel(.go)
                 .onSubmit(run)
                 .padding(.vertical, 7)
+            // One button: stop while a task runs; the microphone while the field is empty (or
+            // while listening); send once there is text.
+            let mic = !agent.running && (empty || listener.listening)
             Button {
-                if agent.running { agent.stop() } else { run() }
+                if agent.running { agent.stop() } else if mic { typing = false; listener.toggle() } else { run() }
             } label: {
-                Image(systemName: agent.running ? "stop.fill" : "arrow.up")
+                Image(systemName: agent.running ? "stop.fill" : (mic ? "mic.fill" : "arrow.up"))
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(agent.running ? Theme.ink : .white)
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(agent.running ? Theme.text : Theme.magenta))
-                    .opacity(!agent.running && empty ? 0.35 : 1)
+                    .background(Circle().fill(agent.running ? Theme.text : (mic && !listener.listening ? Theme.raised : Theme.magenta)))
+                    .scaleEffect(listener.listening ? 1.12 : 1)
+                    .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: listener.listening)
             }
-            .disabled(!agent.running && empty)
+            .accessibilityLabel(agent.running ? "Stop" : (mic ? (listener.listening ? "Stop listening" : "Speak") : "Send"))
         }
         .padding(.leading, 16)
         .padding(.trailing, 6)
@@ -242,6 +249,7 @@ struct TaskView: View {
     private func run() {
         guard !agent.running, !empty else { return }
         typing = false
+        listener.finish(run: false)
         agent.start(request)
     }
 
@@ -273,15 +281,18 @@ struct TaskView: View {
 
     private var suggestions: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Label2("Try")
-            ForEach(examples, id: \.self) { e in
-                Button { request = e } label: {
-                    Text(e).font(Theme.sans(15)).foregroundStyle(Theme.text.opacity(0.8))
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 4)
-                        .contentShape(Rectangle())
+            Label2(ideas.contains { $0.habit } ? "Usually around now" : "Try")
+            ForEach(ideas, id: \.self) { idea in
+                Button { request = idea.prompt } label: {
+                    HStack(spacing: 8) {
+                        if idea.habit { Image(systemName: "clock").font(.system(size: 12)).foregroundStyle(Theme.green) }
+                        Text(idea.prompt).font(Theme.sans(15)).foregroundStyle(Theme.text.opacity(0.8))
+                            .multilineTextAlignment(.leading)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 4)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -334,6 +345,8 @@ struct DeviceView: View {
     @EnvironmentObject var capture: ScreenCapture
     @EnvironmentObject var pointer: Pointer
     @EnvironmentObject var routines: RoutineStore
+    @EnvironmentObject var voice: Voice
+    @State private var habitRuns = Shared.history.count
 
     var body: some View {
         ScrollView {
@@ -390,6 +403,30 @@ struct DeviceView: View {
                     }
                     if !routines.all.isEmpty {
                         ActionRow(title: "Forget all", color: Theme.magenta) { withAnimation { routines.deleteAll() } }
+                    }
+                }
+
+                Card("Voice", footer: "Mantiza says the result out loud, also when the ring switch is on silent. Say \"Hey Siri, ask Mantiza\", or tap the microphone on the Task screen.") {
+                    HStack {
+                        Text("Speak results").font(Theme.sans(15)).foregroundStyle(Theme.text)
+                        Spacer()
+                        Picker("Speak results", selection: $voice.mode) {
+                            ForEach(SpeakMode.allCases) { Text($0.label).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .tint(Theme.dim)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                }
+
+                Card("Habits", footer: "Mantiza remembers which tasks worked and when, to offer them at the right time in the app and the widget. This stays on your iPhone.") {
+                    Row(key: "Tasks remembered", value: "\(habitRuns)")
+                    if habitRuns > 0 {
+                        ActionRow(title: "Forget habits", color: Theme.magenta) {
+                            Shared.forgetHabits()
+                            habitRuns = 0
+                        }
                     }
                 }
 

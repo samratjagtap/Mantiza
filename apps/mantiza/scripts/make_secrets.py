@@ -85,3 +85,12 @@ out.write_text(
 print("Wrote", out.name, "with:", ", ".join(f"{k} {'set' if values.get(k) else 'EMPTY'}"
                                             for k in ("OPENAI_API_KEY", "OPENROUTER_API_KEY", "GEMINI_API_KEY"))
       + f"; debug inbox {inbox or 'off'}")
+
+# The app's actions (App Intents) must also be compiled into the widget, which shows their buttons:
+# one source of truth, copied before every build.
+_here = Path(__file__).resolve().parent.parent / "Sources"
+_actions = (_here / "Mantiza" / "Intents.swift").read_text(encoding="utf-8")
+_copy = _here / "MantizaWidget" / "Intents.swift"
+_text = "// COPY of Sources/Mantiza/Intents.swift, written by scripts/make_secrets.py. Edit that file, not this one.\n" + _actions
+if not _copy.exists() or _copy.read_text(encoding="utf-8") != _text:
+    _copy.write_text(_text, encoding="utf-8", newline="\n")

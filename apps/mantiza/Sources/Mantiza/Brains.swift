@@ -66,6 +66,12 @@ private func send(_ req: URLRequest, hedge: Double) async throws -> (Data, URLRe
 
 private func postJSON(_ url: URL, headers: [String: String], body: [String: Any], timeout: Double = 8,
                       hedge: Double = 2.5, attempts: Int = 2) async throws -> [String: Any] {
+    // Weak internet: a second request would only compete with the first for the little upload
+    // there is, so give the one request more time instead.
+    let weak = Net.weak
+    let stepCall = timeout <= 8  // the plan (longer, slower by nature) doesn't count towards "weak internet"
+    let timeout = weak ? max(timeout, 15) : timeout
+    let hedge = weak ? timeout + 1 : hedge
     var req = URLRequest(url: url, timeoutInterval: timeout)
     req.httpMethod = "POST"
     req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -91,9 +97,13 @@ private func postJSON(_ url: URL, headers: [String: String], body: [String: Any]
             try? await Task.sleep(for: .milliseconds(300))
         }
     }
-    guard let (data, response, second) = result else { throw URLError(.timedOut) }
+    guard let (data, response, second) = result else {
+        if stepCall { Net.record(10) }
+        throw URLError(.timedOut)
+    }
     let kb = Double(req.httpBody?.count ?? 0) / 1024
     let secs = Date().timeIntervalSince(started)
+    if stepCall { Net.record(secs) }
     let triesNote = (tries > 1 ? ", \(tries) tries" : "") + (second ? ", 2nd request won" : "")
     await MainActor.run {
         Net.lastCall = String(format: "%.0f KB up, %.1f s on the network%@, %@", kb, secs, triesNote,

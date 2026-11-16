@@ -28,7 +28,10 @@ final class Agent: ObservableObject {
 
     @Published var running = false
     @Published var status = "Ready" {
-        didSet { showOnDevice(status) }
+        didSet {
+            showOnDevice(status)
+            if running { LiveStatus.shared.update(status) }  // Lock Screen / Dynamic Island
+        }
     }
     @Published var steps: [Step] = []
 
@@ -46,6 +49,8 @@ final class Agent: ObservableObject {
     private var wantAmPm: String?     // an alarm being added in Clock: "AM" or "PM"
     private var recOpen = false
     private var eyesTask: Task<Bool, Never>?  // screen sharing being started right now
+    private var askedByVoice = false          // the task came by voice (Siri, the mic): the result is spoken
+    private var spokenReply = ""              // what to say when the task is done
 
     /// Confidence the fast brain needs to act alone. Speed round 2026-11-15, at the app's own image
     /// size (642 px wide): never wrong at ≥ 0.7 (66 of 82 tasks), wrong 4 times between 0.5 and 0.7.
@@ -53,8 +58,9 @@ final class Agent: ObservableObject {
     private static let riskyWords = ["send", "pay", "buy", "order", "delete", "remove", "post", "share",
                                      "call", "confirm", "purchase", "transfer", "publish", "submit"]
 
-    func start(_ request: String) {
+    func start(_ request: String, byVoice: Bool = false) {
         guard !running else { return }
+        askedByVoice = byVoice
         Task { await run(request.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
@@ -86,6 +92,8 @@ final class Agent: ObservableObject {
         steps = []
         link.send("task on")
         RunLog.shared.begin(request)
+        spokenReply = ""
+        LiveStatus.shared.begin(request: request)
         // Ask iOS for extra time to keep running while other apps are in front.
         var keepAlive = UIBackgroundTaskIdentifier.invalid
         keepAlive = UIApplication.shared.beginBackgroundTask(withName: "Mantiza task") {
@@ -97,6 +105,8 @@ final class Agent: ObservableObject {
             link.send("task off")
             if keepAlive != .invalid { UIApplication.shared.endBackgroundTask(keepAlive) }
             RunLog.shared.finish(result: status, deviceLog: link.log)
+            LiveStatus.shared.finish(status)
+            Voice.shared.say(result: status, reply: spokenReply, askedByVoice: askedByVoice)
             // The widget shows recent tasks and the last result.
             Shared.record(prompt: request, ok: status.hasPrefix("✅") || status.hasPrefix("💬"), result: status)
             WidgetCenter.shared.reloadAllTimelines()
@@ -118,6 +128,10 @@ final class Agent: ObservableObject {
         guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
 
         // 1. Plan: which steps iOS can do directly, which need the screen
+        if !Net.online, PlanCache.get(request) == nil {
+            end("❌ No internet: Mantiza needs it to understand the request. Check Wi-Fi or mobile data")
+            return
+        }
         // Meanwhile: open the connections to both brains, and start screen sharing if it is off
         // (nearly every task needs it, and it takes about 3 s: no reason to wait for the plan first).
         warmBrains()
@@ -154,7 +168,8 @@ final class Agent: ObservableObject {
                 return
             }
         }
-        end("✅ Done in " + seconds(since: taskStart) + " · " + (answers.isEmpty ? (plan.reply ?? "") : answers.joined(separator: " ")))
+        spokenReply = answers.isEmpty ? (plan.reply ?? "") : answers.joined(separator: " ")
+        end("✅ Done in " + seconds(since: taskStart) + " · " + spokenReply)
         if remembered == nil { PlanCache.put(request, plan) }
     }
 
@@ -1190,6 +1205,7 @@ final class Agent: ObservableObject {
         var actedAt = Date.distantPast
         var lastGesture: String?  // a scroll, swipe, press-and-hold or back: did it change anything?
         var waits = 0, stucks = 0, doneDoubts = 0
+        var saidWeak = false
         // A check ("which alarms are on?") only looks: it must never flip a switch or change anything
         // (2026-11-13: asked which alarm was active, the AI turned the 10:22 AM alarm on).
         let lookOnly = !(task.question ?? "").isEmpty
@@ -1229,7 +1245,15 @@ final class Agent: ObservableObject {
                 return true
             }
 
-            guard var frame = capture.latestImage(), var plain = Marks.plain(frame) else { end("❌ No screen image"); return false }
+            // Weak internet (Low Data Mode, or the last AI calls were slow): the upload is what takes
+            // the time, so send less: a lighter picture, and one brain instead of two.
+            let weak = Net.weak
+            if weak, !saidWeak {
+                saidWeak = true
+                add("Weak internet (\(Net.summary)): lighter pictures and one AI call per step until it is quick again")
+            }
+            let quality: CGFloat = weak ? 0.35 : 0.7
+            guard var frame = capture.latestImage(), var plain = Marks.plain(frame, quality: quality) else { end("❌ No screen image"); return false }
             // The big brain only needs the picture, so it is asked now, while the phone reads the
             // text (about 0.4 s): by the time the fast brain has answered, the big brain's answer is
             // nearly there too.
@@ -1295,7 +1319,7 @@ final class Agent: ObservableObject {
                 }
             }
             closeStep(items)  // what the last step changed
-            guard let marked = Marks.numbered(frame, items: items) else {
+            guard let marked = Marks.numbered(frame, items: items, quality: quality) else {
                 bigAsk.task.cancel()
                 end("❌ Couldn't prepare the screenshot"); return false
             }
@@ -1311,7 +1335,7 @@ final class Agent: ObservableObject {
             }
             if askAgain {
                 bigAsk.task.cancel()
-                if looks > 0, let newer = Marks.plain(frame) { plain = newer }
+                if looks > 0, let newer = Marks.plain(frame, quality: quality) { plain = newer }
                 bigAsk = askBig(plain, history)
             }
 
@@ -1347,6 +1371,7 @@ final class Agent: ObservableObject {
             let fastBrain = fast, bigTask = bigAsk.task
             let asked = questions
             let fastTask = Task { @MainActor in
+                if weak { fastSlot.set(.success([:])); return }  // one upload, not two
                 do { fastSlot.set(.success(try await fastBrain.ask(context: context, image: marked, questions: asked))) }
                 catch { fastSlot.set(.failure(error)) }
             }
@@ -1365,6 +1390,7 @@ final class Agent: ObservableObject {
             let action = answers["action"] ?? Choice(value: "icon", confidence: 0)
             let target = answers["target"]
             let reached = answers["reached"]
+            if weak { fastNote = "fast brain not asked: weak internet" }
             if fastNote.isEmpty { fastNote = "fast brain said \(action.value) \(pct(action.confidence))" }
             let shot = UIImage(data: marked)
 
@@ -1398,6 +1424,12 @@ final class Agent: ObservableObject {
                         // A dropped connection or a pause by iOS: wait a moment and look again.
                         brainFails += 1
                         let why = "\(error.localizedDescription.prefix(60)) after \(seconds(since: bigStart)); \(conditions())"
+                        // On weak internet, stop after 2 with the reason in plain words: more tries
+                        // only make the user wait (debug runs of 2026-11-13: 3 x 40 s on 4G).
+                        if Net.weak, brainFails >= 2 {
+                            end("❌ Weak internet (\(Net.summary)): the AI didn't answer twice, so the task stopped. Try again on Wi-Fi or with a better signal")
+                            return false
+                        }
                         if brainFails >= 3 { end("❌ Big brain didn't answer 3 times (\(why))"); return false }
                         add("Step \(n): big brain didn't answer (\(why)); trying this step again")
                         try? await Task.sleep(for: .seconds(1))
