@@ -77,7 +77,7 @@ What this settled:
 | Big brain asked while the text is read | about 0.4 s | It only needs the picture. |
 | Second request after 2.5 s (1.5 s for the fast brain) | the 6–12 s outliers | The first answer wins. Timeout 8 s instead of 12 s. A busy server (HTTP 503) is asked once more. |
 | Connections opened during planning | a few hundred ms on the first step | |
-| Screen sharing started during planning | about 2.7 s on the first task after unlocking | |
+| ~~Screen sharing started during planning~~ | ~~about 2.7 s on the first task after unlocking~~ | **Removed 2026-11-17:** it opened the share sheet for tasks that never need the screen ("hey what's up"). Now only a step that needs the screen starts it. |
 | Plan remembered for a repeated request | about 2 s per task | Only plans that worked, that don't depend on the day or time, from the same build, for 14 days. |
 | Several taps from one answer | about 2 s per extra tap | Only on the same screen, checked before each tap, never in tasks that need your OK. |
 

@@ -132,10 +132,11 @@ final class Agent: ObservableObject {
             end("❌ No internet: Mantiza needs it to understand the request. Check Wi-Fi or mobile data")
             return
         }
-        // Meanwhile: open the connections to both brains, and start screen sharing if it is off
-        // (nearly every task needs it, and it takes about 3 s: no reason to wait for the plan first).
+        // Meanwhile: open the connections to both brains. Screen sharing is NOT started here: only
+        // the plan knows whether the task needs the screen ("hey what's up" doesn't), and each step
+        // that needs it (screen, Siri, alarm, timer, messages, an app opened through Search) starts
+        // it itself.
         warmBrains()
-        let earlyEyes: Task<Bool, Never>? = capture?.running == false ? Task { await self.startEyes(quiet: true) } : nil
         status = "Planning…"
         let t = Date()
         let plan: Plan
@@ -144,7 +145,6 @@ final class Agent: ObservableObject {
             plan = remembered
         } else {
             do { plan = try await big.plan(request, known: routines.names) } catch {
-                _ = await earlyEyes?.value
                 end("❌ Couldn't plan: \(error.localizedDescription)"); return
             }
         }
@@ -158,8 +158,7 @@ final class Agent: ObservableObject {
             return
         }
 
-        // 2. Do the steps in order (once screen sharing has finished starting: its sheet covers the screen)
-        _ = await earlyEyes?.value
+        // 2. Do the steps in order
         for (i, step) in plan.steps.enumerated() {
             if stopRequested { end("⏹ Stopped"); return }
             if plan.steps.count > 1 { add("— Step \(i + 1) of \(plan.steps.count): \(step.summary)") }
