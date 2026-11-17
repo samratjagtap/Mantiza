@@ -60,6 +60,8 @@ import Observation
         var paused: () -> Bool = { false }
         /// Ask the user a question (on the stick, answered by voice); nil when nobody answered.
         var askUser: (String) async -> String? = { _ in nil }
+        /// The phone map: learned from every run, and walked to the plan's screen without the AI. nil = off.
+        var map: MapStore?
     }
 
     private(set) var subtask: Subtask?
@@ -80,7 +82,8 @@ import Observation
         say("Planning")
         Log.event("run.start", ["request": request, "playbook": Playbook.version])
         do {
-            let plan = try await deps.big.plan(request)
+            var plan = try await deps.big.plan(Prompts.planRequest(request, screens: deps.map?.map.index() ?? ""))
+            if let id = plan.screen, deps.map?.map.screen(id) == nil { plan.screen = nil }
             subtask = plan
             note("Plan: \(plan.goal) in \(plan.app ?? "any app"); \(plan.verification.count) checks", ms: 0)
             try await prepare()  // e.g. start screen sharing while Mantiza is still in front
@@ -195,6 +198,13 @@ import Observation
 
     private func execute(_ s: Subtask) async throws -> Outcome {
         try await startApp(s)
+        if let target = s.screen {
+            // A dropped link or a failed look ends the walk, not the run: the loop pauses and recovers.
+            do { try await walk(to: target, s) } catch where !(error is CancellationError) {
+                Log.event("map.walk", ["target": target, "error": error.localizedDescription])
+                history.append("the phone map walk was interrupted; look again and go on from what the screen shows")
+            }
+        }
         return try await loop(s)
     }
 
@@ -213,6 +223,94 @@ import Observation
         }
     }
 
+    static let maxWalk = 12
+    static let maxSearchScrolls = 2
+
+    /// Walk the phone map to a known screen with no AI: the cheapest path, one tap at a time, checking where each
+    /// tap lands. A landing elsewhere counts against that edge and the walk goes on from where it is; with no
+    /// path left (an unknown screen, a missing label) it stops and the AI loop takes over from there, teaching
+    /// the map the way that works now. True when the screen was reached.
+    @discardableResult
+    private func walk(to target: String, _ s: Subtask) async throws -> Bool {
+        let d = deps!
+        guard let map = d.map, let app = MapStore.app(s.app), let goal = map.map.screen(target), goal.app == app else { return false }
+        say("Going to \(goal.title)")
+        var lastAction = Date()
+        var pending: PhoneMap.Edge?
+        var taken = 0
+        func end(_ reached: Bool, _ why: String) -> Bool {
+            Log.event("map.walk", ["target": goal.title, "steps": taken, "reached": reached, "why": why])
+            if reached {
+                history.append("reached the '\(goal.title)' screen using the phone map")
+            } else if taken > 0 {
+                history.append("the phone map got partway to '\(goal.title)' (\(why)); go on from what the screen shows")
+            }
+            note(reached ? "map: at \(goal.title) in \(taken) steps" : "map: \(why); the AI takes over", ms: 0, source: "map")
+            return reached
+        }
+        while taken <= Self.maxWalk {
+            if d.shouldStop() { return end(false, "stopped") }
+            try Task.checkCancellation()
+            let frame = try await d.screen.settled(after: lastAction)
+            let reading = try await OCR.read(frame)
+            if Safety.stopReason(reading) != nil { return end(false, "a sensitive screen") }
+            let here = map.observe(reading, app: app)
+            if let edge = pending {
+                if let here, here == edge.to {
+                    map.record(from: edge.from, edge.action, to: here)
+                } else {
+                    map.failed(edge)
+                    Log.event("map.drift", ["kind": here == nil ? "unknown screen" : "landed elsewhere", "action": PhoneMap.key(edge.action)])
+                }
+                pending = nil
+            }
+            guard let here else { return end(false, "an unknown screen") }
+            if here == target { return end(true, "") }
+            guard let edge = map.map.route(from: here, to: target)?.first else { return end(false, "no known way from here") }
+            guard taken < Self.maxWalk else { break }
+            taken += 1
+            let text = edge.action.kind == "back" ? "Going back" : "Tapping “\(edge.action.target ?? "")”"
+            _ = try? await d.hands.channel.send(.ui(.run, step: taken, total: s.maxActions, text: text))
+            d.progress(taken, s.maxActions, text)
+            let started = Date()
+            guard try await take(edge, on: reading) else {
+                map.failed(edge)
+                Log.event("map.drift", ["kind": "label gone", "action": PhoneMap.key(edge.action)])
+                return end(false, "“\(edge.action.target ?? "")” is not on the screen any more")
+            }
+            note("map: \(edge.action.kind) \(edge.action.target ?? "")", ms: 0, act: Self.ms(started), source: "map", recorded: edge.action)
+            history.append("map: \(edge.action.kind) '\(edge.action.target ?? "")'")
+            pending = edge
+            lastAction = Date()
+        }
+        return end(false, "too many steps")
+    }
+
+    /// One map edge on the current screen: find its label near where it was (scrolling down a little if it is
+    /// not in view) and tap it, or go back. False when the label is not found or now looks risky.
+    private func take(_ edge: PhoneMap.Edge, on reading: ScreenReading) async throws -> Bool {
+        let d = deps!
+        if edge.action.kind == "back" {
+            try await act { try await d.hands.swipe(from: CGPoint(x: 0.01, y: 0.5), to: CGPoint(x: 0.7, y: 0.5)) }
+            return true
+        }
+        guard let label = edge.action.target else { return false }
+        let near = edge.action.point ?? CGPoint(x: 0.5, y: 0.5)
+        var reading = reading
+        for scrolls in 0...Self.maxSearchScrolls {
+            if let e = reading.find(label).min(by: { distance($0.center, near) < distance($1.center, near) }) {
+                guard Safety.risk(of: e) == nil else { return false }
+                try await act { try await d.hands.tap(e.center) }
+                return true
+            }
+            guard scrolls < Self.maxSearchScrolls else { break }
+            let scrolled = Date()
+            try await act { try await d.hands.scroll(down: true) }
+            reading = try await OCR.read(try await d.screen.settled(after: scrolled))
+        }
+        return false
+    }
+
     /// Look -> decide -> act until the checks pass.
     private func loop(_ subtask: Subtask) async throws -> Outcome {
         var s = subtask  // the user's answers to questions become inputs
@@ -224,6 +322,8 @@ import Observation
         var rejected = 0                // model answers that could not be used; each costs a fresh look
         var nudged = ""                 // the repeated action the model was already told to change
         var helped = 0                  // times the user was asked to get the agent unstuck
+        let app = MapStore.app(s.app)
+        var mapFrom: (screen: String, action: RecordedAction)?  // the last action, to learn where it led
         /// Stuck: ask the user (at most `maxHelp` times) before giving up. nil = they helped, go on; else the end.
         func stuck(_ reason: String) async -> Outcome? {
             guard helped < Self.maxHelp else { return .blocked(reason) }
@@ -233,7 +333,7 @@ import Observation
             guard await d.askHelp(reason) else { return .blocked(reason) }
             history.append("the agent was stuck (\(reason)); the user fixed it by hand. Look again and go on from what the screen shows")
             note("you helped; looking again", ms: 0)
-            noChange = 0; stale = 0; rejected = 0; nudged = ""; lastSignature = ""; before = nil
+            noChange = 0; stale = 0; rejected = 0; nudged = ""; lastSignature = ""; before = nil; mapFrom = nil
             lastAction = Date()
             return nil
         }
@@ -251,6 +351,7 @@ import Observation
                     history.append("the user paused and resumed; the screen may have changed. Look again, do not repeat the last action blindly")
                     note("resumed; looking again", ms: 0)
                     before = nil
+                    mapFrom = nil
                     lastAction = Date()
                 }
                 for text in takeAmendments() {
@@ -273,6 +374,12 @@ import Observation
                 let ocrStarted = Date()
                 let reading = try await OCR.read(frame)
                 let ocrMs = Self.ms(ocrStarted)
+                var here: String?
+                if let map = d.map, let app {
+                    here = map.observe(reading, app: app)
+                    if let from = mapFrom, let here { map.record(from: from.screen, from.action, to: here) }
+                }
+                mapFrom = nil
                 let decideStarted = Date()
                 if let why = Safety.stopReason(reading) { return .blocked(why) }
                 let (visible, hidden) = Safety.filter(reading, allowed: s.allowedRisks)
@@ -375,6 +482,9 @@ import Observation
                     note("\(decision.source): tap “\(label ?? "icon")” (\(Int(target.x * 1000)),\(Int(target.y * 1000)))", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source,
                          recorded: RecordedAction(kind: "tap", target: label, point: target))
                     history.append("tap \(element.map { "\($0) " } ?? "")'\(label ?? "icon")'")
+                    if let here, let label, element.flatMap(reading.element).flatMap(Safety.risk) == nil {
+                        mapFrom = (here, RecordedAction(kind: "tap", target: label, point: target))
+                    }
                     lastSignature = signature
                     before = frame
                     lastAction = acted
@@ -417,6 +527,7 @@ import Observation
                     let actMs = Self.ms(actStarted)
                     note("\(decision.source): back", ms: thinkMs, capture: captureMs, ocr: ocrMs, act: actMs, source: decision.source, recorded: RecordedAction(kind: "back"))
                     history.append("back")
+                    if let here { mapFrom = (here, RecordedAction(kind: "back")) }
                     before = frame
                     lastAction = acted
                 case .home:
@@ -452,6 +563,7 @@ import Observation
                 history.append("the connection was lost and came back; the last action may or may not have happened. Look again and do not repeat it blindly")
                 note("connection back; looking again", ms: 0)
                 before = nil
+                mapFrom = nil
                 lastAction = Date()
             }
         }

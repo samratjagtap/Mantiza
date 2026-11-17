@@ -46,26 +46,27 @@ struct PrivacyView: View {
     var body: some View {
         List {
             Section("Sent to AI services during a task") {
-                LabeledContent("Anthropic (Claude)", value: "screenshots, screen text")
-                LabeledContent("Google (Gemini)", value: "screenshots, screen text")
+                LabeledContent("Anthropic (Claude)", value: "screenshots, screen text, screen names")
+                LabeledContent("Google (Gemini)", value: "screenshots, screen text, screen names")
                 LabeledContent("Laya (your own server)", value: "screen text")
                 LabeledContent("TypeSafe (Jev), if chosen", value: "screen text")
-                Text("Only the service you choose as big brain receives screenshots. The quick picker never receives images.")
+                Text("Only the service you choose as big brain receives screenshots. The quick picker never receives images. To plan a task, the big brain also gets the titles and labels of the screens on the phone map.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section("Kept on this iPhone") {
                 LabeledContent("Runs", value: "\(app.runs.runs.count)")
                 LabeledContent("Workflows", value: "\(app.workflows.workflows.count)")
+                LabeledContent("Phone map", value: "\(app.map.map.screens.count) screens")
                 LabeledContent("Approvals", value: "\(app.approvals.history.count)")
                 LabeledContent("API keys", value: "Keychain")
-                Text("Screen images are not saved. Runs keep each step's text and timing; training examples keep the text read from each screen, so Laya on your Mac can learn from Claude's choices.")
+                Text("Screen images are not saved. Runs keep each step's text and timing; training examples keep the text read from each screen, so Laya on your Mac can learn from Claude's choices. The phone map keeps the short labels of screens visited (no numbers) and which tap leads where.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
             Section {
                 Button("Delete all data", role: .destructive) { confirm = true }
                 if deleted { Label("Deleted", systemImage: "checkmark").foregroundStyle(.green) }
             } footer: {
-                Text("Removes runs, training examples, workflows, approvals, calibration and API keys from this iPhone.")
+                Text("Removes runs, training examples, workflows, the phone map, approvals, calibration and API keys from this iPhone.")
             }
         }
         .navigationTitle("Privacy")

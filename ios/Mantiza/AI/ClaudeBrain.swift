@@ -142,8 +142,9 @@ enum Schemas {
             "allowed_risks": ["type": "array", "items": ["type": "string", "enum": Array(Safety.riskKinds).sorted()]],
             "max_actions": ["type": "integer"],
             "contact": nullable("string"),
+            "screen": nullable("string"),
         ],
-        "required": ["goal", "app", "inputs", "verification", "allowed_risks", "max_actions", "contact"],
+        "required": ["goal", "app", "inputs", "verification", "allowed_risks", "max_actions", "contact", "screen"],
         "additionalProperties": false,
     ]
 

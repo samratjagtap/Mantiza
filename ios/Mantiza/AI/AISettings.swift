@@ -33,6 +33,12 @@ enum AISettings {
         set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespaces), forKey: "ai.layaURL") }
     }
 
+    /// Learn a map of the phone's screens from runs and walk known paths without the AI (PhoneMap).
+    static var useMap: Bool {
+        get { UserDefaults.standard.object(forKey: "map.on") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "map.on") }
+    }
+
     static func bigBrain() throws -> BigBrain {
         switch big {
         case .claude:

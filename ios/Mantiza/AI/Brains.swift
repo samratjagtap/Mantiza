@@ -15,9 +15,11 @@ struct Subtask: Codable, Equatable {
     var maxActions = 15
     /// The person the task is about ("Azad"), for the contacts fast path.
     var contact: String?
+    /// A known screen of the phone map (PhoneMap) where the work starts; reached without the AI.
+    var screen: String?
 
     enum CodingKeys: String, CodingKey {
-        case goal, app, inputs, verification, contact
+        case goal, app, inputs, verification, contact, screen
         case allowedRisks = "allowed_risks"
         case maxActions = "max_actions"
     }
@@ -108,7 +110,14 @@ enum Prompts {
     - allowed_risks: which of send, delete, purchase, call, post the user explicitly asked for. Empty if none. Each one is still confirmed by the user before it happens.
     - max_actions: a small budget, usually 6 to 20.
     - contact: the name of the person the task is about (for example who to message), or null.
+    - screen: when a list of known screens follows the request, the id (for example "s12") of the screen in that app where the remaining work starts, such as the settings page that holds the switch. Mantiza walks there by itself. null when none fits or there is no list.
     """
+
+    /// The planner's message: the request, plus the screens Mantiza already knows (PhoneMap.index).
+    static func planRequest(_ request: String, screens: String) -> String {
+        guard !screens.isEmpty else { return request }
+        return "Request: \(request)\n\nKnown screens (id | app | title | other labels on it):\n\(screens)"
+    }
 
     /// The actor's instructions: the action vocabulary below plus the operating playbook (Resources/playbook.md).
     static let actor = actorActions + "\n\n" + Playbook.text

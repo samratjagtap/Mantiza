@@ -79,6 +79,20 @@ promotes it (served as model `mantiza` by `tools/laya/serve.sh`) when its gated 
 - **Rules:** the actor follows `Mantiza/Resources/playbook.md`, which is versioned and logged with each run.
 - **Diagnostics:** crash and hang reports from iOS are kept on the phone (Settings > Log). Shared runs are redacted.
 
+## Phone map
+
+Every run teaches Mantiza a map of the phone: each screen is known by its stable labels (titles, rows, tabs; not
+times, counts or list contents) and each labelled tap by where it led. The planner sees the known screens and names
+the one where the work starts; Mantiza walks there with no AI calls, checking every screen it lands on.
+
+- **A row moved** (an update added rows above it): the tap finds its label again, scrolling a little if needed.
+- **A tap lands somewhere else:** that edge loses trust (3 misses in a row drop it) and the walk reroutes from
+  where it is.
+- **An unknown screen or a missing label:** the AI takes over from there, and the way it finds is learned.
+- **Home Screen layout:** apps open by link or icon search, never by position, so moving icons changes nothing.
+- Risky taps (send, buy, delete) and icon taps are never on the map; screens unseen for 90 days are forgotten.
+  Settings > Phone map turns it off or forgets it. Logged as `map.walk` and `map.drift`.
+
 ## Siri, Shortcuts and Control Center
 
 Say "Run <workflow> in Mantiza", use the Run a Mantiza Workflow action in Shortcuts, or add the Mantiza button
@@ -104,6 +118,7 @@ Approve) and the workflow widget (Now / Pinned / Recent tabs).
   server via `tools/laya/serve.sh`, or TypeSafe's Jev), keys in the Keychain.
 - `Mantiza/Agent`: the agent loop (`AgentRunner`), safety rules, approvals from stick or phone, fast paths (Messages,
   Maps, Shortcuts links).
+- `Mantiza/Map`: the phone map (`PhoneMap`: screen fingerprints, edges, routes; `MapStore` on disk).
 - `Mantiza/Workflows`: run log with step timings (`RunStore`), learned workflows and suggestions (`WorkflowStore`).
 - `Mantiza/UI`: the screens.
 - `Shared`: Live Activity attributes and intents, widget data (used by both targets).

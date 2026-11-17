@@ -14,6 +14,7 @@ import UIKit
     let live = LiveRun()
     let runs = RunStore()
     let workflows = WorkflowStore()
+    let map = MapStore()
     /// Push-to-talk on the stick.
     let talk: StickTalk
     /// The full-screen agent widget.
@@ -230,7 +231,8 @@ import UIKit
                 let answer = await talk.ask(question)
                 canvas.update { $0.phase = .working; $0.question = nil }
                 return answer
-            })
+            },
+            map: AISettings.useMap ? map : nil)
     }
 
     /// Plan and run a request end to end.
@@ -358,10 +360,11 @@ import UIKit
         }
     }
 
-    /// Delete runs, workflows, approvals, calibration and keys.
+    /// Delete runs, workflows, the phone map, approvals, calibration and keys.
     func deleteAllData() {
         runs.deleteAll()
         workflows.deleteAll()
+        map.deleteAll()
         TrainingLog.deleteAll()
         approvals.clearHistory()
         resetCalibration()

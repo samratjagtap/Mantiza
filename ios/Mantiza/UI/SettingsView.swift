@@ -7,6 +7,9 @@ struct SettingsView: View {
     @State private var geminiModel = AISettings.geminiModel
     @State private var fast = AISettings.fast
     @State private var layaURL = AISettings.layaURL
+    @State private var useMap = AISettings.useMap
+    @State private var mapScreens: Int?
+    @Environment(AppModel.self) private var app
 
     var body: some View {
         Form {
@@ -44,6 +47,16 @@ struct SettingsView: View {
                      ? "Laya runs on your Mac (tools/laya/serve.sh prints the address and key; Mantiza finds the Mac on the same Wi-Fi by itself). It picks taps from the text on screen; unsure steps go to the big brain."
                      : "The quick picker chooses most taps from the text on screen in a fraction of a second; unsure steps go to the big brain.")
             }
+            Section {
+                Toggle("Learn and use the phone map", isOn: $useMap)
+                LabeledContent("Screens learned", value: "\(mapScreens ?? app.map.map.screens.count)")
+                Button("Forget the map", role: .destructive) { app.map.deleteAll(); mapScreens = 0 }
+                    .disabled((mapScreens ?? app.map.map.screens.count) == 0)
+            } header: {
+                Text("Phone map")
+            } footer: {
+                Text("Each task teaches Mantiza which screen is which and which tap leads where. Later tasks walk known paths with no AI calls and check every screen they land on; when the phone has changed, the AI takes over from there and the map learns the new way.")
+            }
             Section("Keys") { KeysForm() }
             Section {
                 NavigationLink("Safety") { SafetyView() }
@@ -58,6 +71,7 @@ struct SettingsView: View {
         .onChange(of: claudeModel) { _, v in AISettings.claudeModel = v }
         .onChange(of: geminiModel) { _, v in AISettings.geminiModel = v }
         .onChange(of: fast) { _, v in AISettings.fast = v }
+        .onChange(of: useMap) { _, v in AISettings.useMap = v }
         .onChange(of: layaURL) { _, v in AISettings.layaURL = v; Reachability.reset("laya") }
     }
 }
