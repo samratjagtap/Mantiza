@@ -296,6 +296,8 @@ final class BigBrain {
         Direct actions (fields in brackets):
         - "answer" [text]: just reply, for questions you can answer yourself (facts, maths, advice, jokes).
           Not for live data (weather, scores, time somewhere): use "siri".
+          Greetings and small talk ("hi", "hey what's up", "how are you", "thanks") are ALWAYS one "answer" step:
+          never "siri" or "screen".
         - "siri" [text, state, state_value]: hand the request to the iPhone's own Siri, which does it inside iOS, fast.
           text: the request in plain English as you'd type it to Siri, complete and specific (names exactly as said).
           Use it for: phone settings (Wi-Fi on/off, mobile data, Airplane Mode, Dark Mode, Low Power Mode, Night Shift,

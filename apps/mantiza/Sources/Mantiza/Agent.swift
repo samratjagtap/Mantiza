@@ -140,7 +140,7 @@ final class Agent: ObservableObject {
         warmBrains()
         status = "Planning…"
         let t = Date()
-        let plan: Plan
+        var plan: Plan
         let remembered = PlanCache.get(request)
         if let remembered {
             plan = remembered
@@ -148,6 +148,11 @@ final class Agent: ObservableObject {
             do { plan = try await big.plan(request, known: routines.names) } catch {
                 end("❌ Couldn't plan: \(error.localizedDescription)"); return
             }
+        }
+        // Small talk never goes to Siri or the screen, whatever the plan says: those routes start
+        // screen sharing ("hey what's up" opened the share sheet, 2026-11-17).
+        if let chat = SmallTalk.reply(to: request), !plan.steps.allSatisfy({ $0.action == "answer" }) {
+            plan = Plan(reply: chat, steps: [])
         }
         RunLog.shared.plan(plan)
         add("Plan (\(remembered == nil ? seconds(since: t) : "remembered from last time, no AI")): "
@@ -1874,6 +1879,37 @@ private final class Slot<T> {
 /// Plans of requests that worked, so asking the same thing again skips the planning call (about 2 s:
 /// the widget's recent tasks, things asked every day). Only plans that don't depend on the day or
 /// the time, and only from this build (a new build may plan differently).
+/// Greetings and small talk: answered in the app, never by Siri or the screen.
+enum SmallTalk {
+    private static let filler: Set<String> = ["hey", "hi", "hii", "hello", "helo", "yo", "mantiza", "there", "buddy",
+                                              "bro", "dude", "man", "so", "and", "oh", "well", "again"]
+    private static let thanks: Set<String> = ["thanks", "thank you", "thank you so much", "thanks a lot", "thx", "ty",
+                                              "thank u", "thanks man", "cheers"]
+    private static let bye: Set<String> = ["bye", "see you", "good night", "gn"]
+    private static let chat: Set<String> = [
+        "", "whats up", "what s up", "wassup", "wasup", "sup", "whatsup", "how are you", "how r u", "how are u",
+        "how are you doing", "how you doing", "hows it going", "how s it going", "how is it going", "whats new",
+        "what s new", "good morning", "good afternoon", "good evening", "gm", "ok", "okay",
+        "cool", "nice", "great", "awesome", "good job", "well done", "nice work",
+        "how are things", "how is your day", "how s your day", "hows your day",
+    ]
+
+    /// A short friendly reply when the whole request is small talk, else nil.
+    static func reply(to request: String) -> String? {
+        let words = Words.norm(request).split(separator: " ").map(String.init)
+        guard !words.isEmpty, words.count <= 8 else { return nil }
+        // Drop greeting words at the start and end ("hey what's up man").
+        var rest = words
+        while let w = rest.first, filler.contains(w) { rest.removeFirst() }
+        while let w = rest.last, filler.contains(w) { rest.removeLast() }
+        let core = rest.joined(separator: " ")
+        if thanks.contains(core) { return "You're welcome!" }
+        if bye.contains(core) { return "Bye! I'm here when you need me." }
+        if chat.contains(core) { return "Hey! All good here. What can I do on your phone?" }
+        return nil
+    }
+}
+
 enum PlanCache {
     private struct Entry: Codable {
         var plan: Plan
