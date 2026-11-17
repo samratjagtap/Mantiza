@@ -91,7 +91,7 @@ final class Voice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             return text.isEmpty ? "Done." : text
         }
         if status.hasPrefix("💬") { return clean(String(status.dropFirst())) }
-        if status.hasPrefix("❓") { return clean(String(status.dropFirst())) }
+        if status.hasPrefix("❓") || status.hasPrefix("⛔") { return clean(String(status.dropFirst())) }
         if status.hasPrefix("❌") {
             let why = clean(String(status.dropFirst())).split(separator: ":").first.map(String.init) ?? ""
             return "Sorry, that didn't work. " + why

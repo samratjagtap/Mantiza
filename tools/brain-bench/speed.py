@@ -69,10 +69,11 @@ Choose the ONE next action:
 - "tap": tap something (give its point).
 - "long_press": press and hold something to get its menu (copy, delete, react, edit).{typing}
 - "scroll_down" / "scroll_up": move the page to see what is further down / up. Give a point inside the list
-  or page to scroll if the screen has more than one.
+  or page to scroll if the screen has more than one. "find": the exact text you are scrolling to reach (a name,
+  a setting, a heading) if you know it, else null.
 - "swipe_left" / "swipe_right": swipe sideways on something (next or previous photo, story, page, card);
   give its point.
-- "back": go back one screen.
+- "back": go back one screen. Give the point of the back arrow or "<" button if one is visible, else null.
 - "wait": the screen is still loading (a spinner, empty placeholders).
 - "done": the goal is already reached on this screen.
 - "stuck": the goal can't be reached from here; say why in "what".
@@ -85,7 +86,8 @@ Points are on a 0-1000 grid (0,0 top-left; 1000,1000 bottom-right).
 "also": ONLY when several separate things on THIS screen must each be tapped and tapping one doesn't move or
 hide the others (several day buttons, several checkboxes): the other points, in order. Otherwise [].
 Reply with only JSON: {{"action": "<action>", "x": <x or null>, "y": <y or null>,
-"what": "<short label of the thing, or the reason>", "enter": false, "also": [{{"x": <x>, "y": <y>, "what": "<label>"}}]}}"""
+"what": "<short label of the thing, or the reason>", "enter": false, "find": null,
+"also": [{{"x": <x>, "y": <y>, "what": "<label>"}}]}}"""
 
 
 def gemini(session, key, prompt, jpeg, resolution=None):
@@ -173,6 +175,9 @@ PROBES = [
     ("s15", "The Wi-Fi settings page is open.", None, ["done"]),
     ("s12", "The alarm repeats on Monday, Tuesday, Wednesday, Thursday and Friday: tap those day circles (S M T W T F S, Sunday first).", None, ["tap"]),
     ("s01", "Open the profile of Azad on Instagram.", None, ["stuck", "back"]),
+    ("s16", "Open the Privacy & Security settings.", None, ["scroll_down", "tap"]),
+    ("s14", "Go back one screen.", None, ["back"]),
+    ("s15", "Go back one screen.", None, ["back"]),
 ]
 
 
@@ -186,7 +191,7 @@ def run_probes():
         ok = obj.get("action") in accepted
         right += ok
         print(f"{'ok ' if ok else 'NO '} {dt:.2f}s {screen} {goal[:60]!r} -> {obj.get('action')} ({obj.get('x')},{obj.get('y')}) "
-              f"{obj.get('what')!r} enter={obj.get('enter')} also={len(obj.get('also') or [])} {[a.get('what') for a in obj.get('also') or []]}")
+              f"{obj.get('what')!r} enter={obj.get('enter')} find={obj.get('find')!r} also={len(obj.get('also') or [])} {[a.get('what') for a in obj.get('also') or []]}")
     print(f"{right}/{len(PROBES)}")
 
 

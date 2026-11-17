@@ -347,6 +347,9 @@ struct DeviceView: View {
     @EnvironmentObject var routines: RoutineStore
     @EnvironmentObject var voice: Voice
     @State private var habitRuns = Shared.history.count
+    @ObservedObject private var blocked = BlockedApps.shared
+    @ObservedObject private var notes = AppNotes.shared
+    @State private var newBlocked = ""
 
     var body: some View {
         ScrollView {
@@ -427,6 +430,63 @@ struct DeviceView: View {
                             Shared.forgetHabits()
                             habitRuns = 0
                         }
+                    }
+                }
+
+                Card("Blocked apps", footer: "Mantiza never opens or works in these apps, whatever the request. Add any app by its name on the Home Screen.") {
+                    ForEach(blocked.names, id: \.self) { name in
+                        HStack {
+                            Text(name).font(Theme.sans(15)).foregroundStyle(Theme.text)
+                            Spacer()
+                            Button { withAnimation { blocked.remove(name) } } label: {
+                                Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(Theme.dim).frame(width: 28, height: 28)
+                            }
+                            .accessibilityLabel("Unblock \(name)")
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 6)
+                    }
+                    HStack {
+                        TextField("", text: $newBlocked, prompt: Text("Add an app").foregroundStyle(Theme.dim))
+                            .font(Theme.sans(15)).foregroundStyle(Theme.text).tint(Theme.magenta)
+                            .submitLabel(.done)
+                            .onSubmit { blocked.add(newBlocked); newBlocked = "" }
+                        Button("Add") { blocked.add(newBlocked); newBlocked = "" }
+                            .font(Theme.sans(15, .medium)).foregroundStyle(Theme.green)
+                            .disabled(newBlocked.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 11)
+                    ActionRow(title: "Reset to the usual list", color: Theme.dim) { withAnimation { blocked.reset() } }
+                }
+
+                Card("App notes", footer: notes.all.isEmpty
+                     ? "When a task in an app takes detours, Mantiza writes one short note about the app, and uses it next time."
+                     : "Short notes Mantiza wrote after tasks with detours; both brains read them next time. Kept on your iPhone.") {
+                    if notes.all.isEmpty {
+                        Row(key: "None yet", value: "")
+                    }
+                    ForEach(notes.all.keys.sorted(), id: \.self) { app in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(app).font(Theme.sans(15, .medium)).foregroundStyle(Theme.text)
+                                Spacer()
+                                Button { withAnimation { notes.forget(app: app) } } label: {
+                                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(Theme.dim).frame(width: 28, height: 28)
+                                }
+                                .accessibilityLabel("Forget notes about \(app)")
+                            }
+                            ForEach(notes.notes(for: app), id: \.self) { line in
+                                Text(line).font(Theme.sans(13)).foregroundStyle(Theme.dim)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                    }
+                    if !notes.all.isEmpty {
+                        ActionRow(title: "Forget all notes", color: Theme.magenta) { withAnimation { notes.forgetAll() } }
                     }
                 }
 

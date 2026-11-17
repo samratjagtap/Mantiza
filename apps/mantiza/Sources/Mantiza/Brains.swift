@@ -248,6 +248,7 @@ struct Move {
     var what: String         // short label of the thing, or the reason (wait, done, stuck)
     var enter = false        // type: press Return after typing (search boxes)
     var also: [TapPoint] = []  // more taps on this SAME screen (several day buttons, several checkboxes)
+    var find: String?          // scroll: the text being looked for (Mantiza scrolls until it shows, no AI)
 }
 
 /// The big brain plans the task once, and finds things the fast brain can't (icons with no text,
@@ -418,10 +419,11 @@ final class BigBrain {
         - "tap": tap something (give its point).
         - "long_press": press and hold something to get its menu (copy, delete, react, edit).\(typing)
         - "scroll_down" / "scroll_up": move the page to see what is further down / up. Give a point inside the list
-          or page to scroll if the screen has more than one.
+          or page to scroll if the screen has more than one. "find": the exact text you are scrolling to reach (a name,
+          a setting, a heading) if you know it, else null.
         - "swipe_left" / "swipe_right": swipe sideways on something (next or previous photo, story, page, card);
           give its point.
-        - "back": go back one screen.
+        - "back": go back one screen. Give the point of the back arrow or "<" button if one is visible, else null.
         - "wait": the screen is still loading (a spinner, empty placeholders).
         - "done": the goal is already reached on this screen.
         - "stuck": the goal can't be reached from here; say why in "what".
@@ -434,7 +436,8 @@ final class BigBrain {
         "also": ONLY when several separate things on THIS screen must each be tapped and tapping one doesn't move or
         hide the others (several day buttons, several checkboxes): the other points, in order. Otherwise [].
         Reply with only JSON: {"action": "<action>", "x": <x or null>, "y": <y or null>,
-        "what": "<short label of the thing, or the reason>", "enter": false, "also": [{"x": <x>, "y": <y>, "what": "<label>"}]}
+        "what": "<short label of the thing, or the reason>", "enter": false, "find": null,
+        "also": [{"x": <x>, "y": <y>, "what": "<label>"}]}
         """
         let obj = try await generate(parts: [
             ["text": prompt],
@@ -448,9 +451,30 @@ final class BigBrain {
         guard let action = Move.Action(rawValue: name) else { throw BrainError.badAnswer("\(obj)") }
         var move = Move(action: action, point: point(obj), what: (obj["what"] as? String) ?? "?")
         move.enter = (obj["enter"] as? Bool) ?? false
+        if let f = (obj["find"] as? String)?.trimmingCharacters(in: .whitespaces), f.count >= 3 { move.find = f }
         if action == .tap { move.also = ((obj["also"] as? [[String: Any]]) ?? []).compactMap(point).prefix(6).map { $0 } }
         // An action that needs a point but came without one can't be done.
         if [.tap, .long_press, .type].contains(action), move.point == nil { throw BrainError.badAnswer("\(obj)") }
         return move
+    }
+
+    /// One lesson about an app from a task that worked but had trouble on the way, for next time.
+    /// Text only (no picture), so it is quick and cheap. Nil when there is nothing worth keeping.
+    func lesson(app: String, goal: String, steps: [String], known: [String]) async throws -> String? {
+        let prompt = """
+        An assistant just finished a task in the iPhone app "\(app)", but it took detours.
+        Goal: \(goal)
+        What it did, in order: \(steps.suffix(16).joined(separator: "; "))
+        Already known about this app: \(known.isEmpty ? "nothing" : known.joined(separator: " / "))
+        Write ONE short lesson (at most 20 words) about where things are or how this app behaves that would have
+        made this kind of task quicker, e.g. "Stories are the round pictures at the top of the Home feed".
+        Only facts about the app itself: no names, messages, numbers or anything personal from the task.
+        Nothing already known. If there is no useful lesson, the lesson is "none".
+        Reply with only JSON: {"lesson": "<the lesson or none>"}
+        """
+        let obj = try await generate(parts: [["text": prompt]])
+        guard let text = (obj["lesson"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty, text.lowercased() != "none", text.count <= 200 else { return nil }
+        return text
     }
 }
