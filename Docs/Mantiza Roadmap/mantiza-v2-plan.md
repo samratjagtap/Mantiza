@@ -130,10 +130,10 @@ Mantiza's differences:
 | **Privacy** | What is stored, delete everything, choose AI provider |
 
 ### 4.2 The agent loop (per task)
-1. **Understand (big brain):** turn the request into a **subtask**: goal, literal inputs, how to check success, allowed risky actions, maximum steps (format idea from arc-cua [P36]). Example: _"Reply to Azad that I'm coming"_ → `{app: Messages, contact: Azad, text: "I'm coming", check: "message 'I'm coming' visible in Azad chat", allowed_risks: [send], max_steps: 8}`.
+1. **Understand (big brain):** turn the request into a **subtask**: goal, literal inputs, how to check success, allowed risky actions, maximum steps. Example: _"Reply to Azad that I'm coming"_ → `{app: Messages, contact: Azad, text: "I'm coming", check: "message 'I'm coming' visible in Azad chat", allowed_risks: [send], max_steps: 8}`.
 2. **Fast path first** _(idea)_: if an app link, Shortcut or Apple framework can do part of the job, use it (section 4.5).
 3. **Start the eyes:** screen capture via the system picker (consent per session; whether it repeats every time is ❓).
-4. **Loop** _(idea, pattern from [P34][P35][P36])_:
+4. **Loop**:
    1. Capture the latest frame → OCR → build a **numbered list** of on-screen items with their boxes (e.g. `[1] "Azad"`, `[2] "Search"`, `[3] "iMessage"`).
    2. **Jev** picks the operation and the item number. Risky items (Send, Delete, Buy) are **left out of the list** unless the subtask allows them.
    3. If Jev's **confidence is low**, or the target is an **icon with no text**, ask the **big brain** with the screenshot instead.
@@ -217,7 +217,7 @@ All of these plug in through Apple's `LanguageModel` protocol ("Anthropic and Go
 - Published phone agents on real apps take **7–30 s per step** (AndroidDaily: Gemini 3 Flash 14.7 s/step) [P39]; mobile-jev reports "about 21 seconds for 9 actions" on Android 📰 [P35].
 - Turning repeated steps into shortcuts cut task time **from 209 s to 91 s** in research (AppAgentX) [P40], which supports section 8.
 
-**Speed techniques we adopt** _(ideas; patterns seen in [P34]–[P36], our own code)_:
+**Speed techniques we adopt**:
 1. Two brains (fast picker for most taps).
 2. Fast paths and learned workflows: skip steps entirely.
 3. Wait-for-settle instead of fixed waits (arc-cua cut waiting from ~1.3 s to 0.75 s on a task 📰 [P36]).
@@ -457,8 +457,8 @@ Facts from M5Stack's documentation [P15]:
 | **Screen data** | Screenshots go to the cloud model only with clear consent (disclosed by name: Anthropic or Google); send downsized frames; never capture blocked apps; never store full video, only selected step images (deletable) |
 | **Clipboard** | Expiring, local-only items [P14] |
 | **Prompt injection** | Treat text read from the screen as data, never as instructions; sensitive actions always need approval. Jev does not treat state as hostile by default [P32], so it only ever picks from our list |
-| **Risky taps checked** | Delete, Buy, Pay, Post: the app asks before tapping them unless the request itself asked for exactly that _(pattern from arc-cua [P36])_ |
-| **No blind retries** | Never repeat an action after an uncertain failure (e.g. Send), so nothing is sent or ordered twice _(pattern from mobile-jev [P35])_ |
+| **Risky taps checked** | Delete, Buy, Pay, Post: the app asks before tapping them unless the request itself asked for exactly that |
+| **No blind retries** | Never repeat an action after an uncertain failure (e.g. Send), so nothing is sent or ordered twice |
 | **Literal text only** | The picker never invents text; message text comes only from the user's request via the big brain. Missing input → ask the user |
 | **AI providers disclosed** | Consent screen names every company that receives data: Anthropic or Google (screenshots), TypeSafe (on-screen text list) [P33] |
 | **Device security** | Bond only with the owner's phone; signed commands on our channel; reject commands when not bonded |

@@ -11,7 +11,7 @@ let headerRoom: [LinkerSetting] = [.unsafeFlags(["-Xlinker", "-headerpad_max_ins
 // xtool links extensions with Foundation's _NSExtensionMain as the entry point, so nothing refers to
 // the widget's own @main and the linker threw all of its code away (an empty widget that iOS never
 // lists). Keeping _main pulls the widget in; the entry point stays _NSExtensionMain.
-// Same fix as xtool PR #320 (issue #313); drop this once xtool ships it.
+// Drop this once xtool keeps an extension's own code by itself.
 let keepWidgetCode: [LinkerSetting] = [.unsafeFlags(["-Xlinker", "-u", "-Xlinker", "_main"])]
 
 let package = Package(

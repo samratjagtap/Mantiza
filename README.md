@@ -20,7 +20,7 @@ This repo holds the app, the device firmware and the planning docs. Mantiza uses
 | **Live progress** | A Live Activity shows the running task on the Lock Screen and as a banner, with Stop | Built, *to check* |
 | **Habit widget** | The widget and the Task screen offer what you usually ask around this time | Built, *to check* |
 | **Weak internet** | Lighter pictures, one AI call per step, an early and plain "weak internet" stop | Built, *to check* |
-| **"Hey Siri, ask Mantiza", Control Centre button, Shortcuts action** | Written as App Intents | **Not switched on:** iOS needs an index that only a Mac's tool writes; an open-source stand-in is in [tools/appintents](tools/appintents/README.md) but hasn't been run or tested |
+| **"Hey Siri, ask Mantiza", Control Centre button, Shortcuts action** | Written as App Intents | **Not switched on:** iOS needs an index that only a Mac's tool writes; Mantiza's own writer for Windows isn't built yet |
 | **Safety** | Asks before paying, buying, deleting or posting; stops instead of tapping when screen sharing is off or iOS paused it | Built |
 
 Details for the newest group (ways in, voice, Live Activity, habits, weak internet): [research note](Docs/Mantiza%20Roadmap/entry-points-voice-live-research.md).

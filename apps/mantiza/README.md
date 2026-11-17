@@ -46,7 +46,7 @@ Details and the reasons: [research note](../../Docs/Mantiza%20Roadmap/entry-poin
 - **Spoken results:** Mantiza says the result when you asked by voice. Change it under Device → Voice.
 - **Habits:** the widget and the Task screen offer what you usually ask around this time (a small clock marks those). Device → Habits shows and forgets what is remembered.
 - **Weak internet:** lighter pictures, one AI call per step, and an early, plain "weak internet" stop.
-- **Siri ("Hey Siri, ask Mantiza"), the Control Centre button and the Shortcuts action** are written, but iOS only lists them once the App Intents index is packed into the app: run `python3 scripts/make_intents.py` after the build and list its output under `resources` in `xtool.yml` ([how and why](../../tools/appintents/README.md)). Not done yet.
+- **Siri ("Hey Siri, ask Mantiza"), the Control Centre button and the Shortcuts action** are written, but iOS only lists them once the App Intents index is packed into the app: that index is written on a Mac by Apple's tool, and Mantiza's own writer for Windows isn't built yet (`scripts/make_intents.py` is ready to call it). Not done yet.
 
 ## Keys
 The keys are in `C:\Users\PC\.mantiza\keys.env`, outside the repo. `scripts/make_secrets.py` copies them into `Sources/Mantiza/Secrets.swift`, which is in `.gitignore`.

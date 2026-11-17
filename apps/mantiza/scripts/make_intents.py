@@ -2,9 +2,8 @@
 
 iOS only lists an app's actions (Siri phrases, Shortcuts actions, Control Centre buttons, Live
 Activity buttons) from this index. Xcode writes it with Apple's appintentsmetadataprocessor, which
-only runs on a Mac. Off a Mac, the open-source stand-in from rules_applecross (Apache 2.0, kept in
-tools/appintents) writes the same content from the compiler's constant values, which the build
-already leaves in .build.
+only runs on a Mac. Off a Mac, Mantiza needs its own writer (tools/appintents/write_index.py, not written
+yet), working from the compiler's constant values, which the build already leaves in .build.
 
 Run from apps/mantiza AFTER `xtool dev build` and BEFORE `xtool dev` (which packs the result, listed
 under `resources` in xtool.yml):
@@ -17,12 +16,16 @@ import sys
 from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
-TOOL = APP.parent.parent / "tools" / "appintents" / "appintentsmetadataprocessor.py"
+TOOL = APP.parent.parent / "tools" / "appintents" / "write_index.py"
 OBJECTS = APP / ".build" / "out" / "Intermediates.noindex" / "Mantiza.build"
 # The Xcode build the index claims to come from (27.0; the stand-in was compared against it).
 XCODE_BUILD = "27A5194"
 # module -> where its index goes (xtool.yml lists these folders as resources)
 MODULES = {"Mantiza": APP / "Generated" / "app", "MantizaWidget": APP / "Generated" / "widget"}
+
+if not TOOL.exists():
+    sys.exit(f"Mantiza's App Intents index writer isn't written yet ({TOOL}). Siri, the Control Centre button "
+             "and the Shortcuts action stay off until it is.")
 
 configs = sorted(OBJECTS.glob("*-iphoneos"), key=lambda p: p.stat().st_mtime, reverse=True)
 if not configs:

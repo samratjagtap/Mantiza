@@ -1,8 +1,7 @@
 import CoreGraphics
 import Foundation
 
-// Record once, replay without AI (idea from mozarkai/optics-framework, Apache 2.0; see
-// Docs/Mantiza Roadmap/optics-framework-research.md). A screen task the AI finished is saved as
+// Record once, replay without AI. A screen task the AI finished is saved as
 // steps; each step remembers the words on screen before it, what it tapped (by its words, or by a
 // nearby word for icons and switches), and the words that appeared or went away after it.
 // A replay checks all three with on-phone text reading only; when a check fails, the AI takes over

@@ -18,12 +18,13 @@ Ways around it:
 
 | Way | State |
 |---|---|
-| **Open-source stand-in from rules_applecross** | Chosen. Merged 2026-10-28, Apache 2.0, pure Python. Writes the index from the compiler's constant values, which our build already produces. Compared against Xcode 27 on 378 cases, all matching; covers parameters and App Shortcuts **[Source: [PR #228](https://github.com/apple-cross-toolchain/rules_applecross/pull/228), [its notes](https://github.com/apple-cross-toolchain/rules_applecross/blob/main/docs/clean-room/appintentsmetadataprocessor.md)]**. Kept in [tools/appintents](../../tools/appintents/README.md). |
+| **Our own index writer** | Chosen. It reads the compiler's constant values, which our build already produces, and writes the index in the format iOS reads. **Not written yet.** |
 | xtool PR #397 (the same idea inside xtool) | An unreviewed draft; no actions with parameters, so no "Ask Mantiza &lt;request&gt;" |
 | Build the index once on a Mac and ship it | Needs a Mac for every change to the actions |
 
-**State:** the actions are written and the script that produces the index is ready
-(`scripts/make_intents.py`). It has **not been run yet**, and the index isn't packed into the app. Until
+**State:** the actions are written and `scripts/make_intents.py` is ready to call the writer, but the
+writer itself isn't written yet (an outside tool was tried, then removed on 2026-11-17: Mantiza uses
+only its own code). The index isn't packed into the app. Until
 it is, everything below marked **[Needs one step]** falls back to a link that opens Mantiza.
 
 ## 2. Start Mantiza from anywhere
