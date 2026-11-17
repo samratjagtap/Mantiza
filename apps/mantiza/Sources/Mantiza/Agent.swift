@@ -848,7 +848,7 @@ final class Agent: ObservableObject {
         if !quiet { status = "Starting screen sharing…" }
         let t = Date()
         guard await bringMantizaForward() else { return false }
-        guard await pointer.startSharing() else {
+        guard await pointer.startSharing(bringForward: { await self.bringMantizaForward() }) else {
             if quiet { add("Screen sharing didn't start yet (it is tried again when a step needs the screen)") }
             else { end("❌ Screen sharing didn't start") }
             return false

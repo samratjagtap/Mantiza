@@ -229,6 +229,7 @@ extension ScreenCapture: @preconcurrency SCContentSharingPickerObserver {
     }
 
     func contentSharingPicker(_ picker: SCContentSharingPicker, didUpdateWith filter: SCContentFilter, for stream: SCStream?) {
+        note("Picker chose the content (Mantiza \(UIApplication.shared.applicationState == .active ? "in front" : "behind"))")
         start(with: filter)
     }
 

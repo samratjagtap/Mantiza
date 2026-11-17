@@ -162,8 +162,9 @@ final class Pointer: ObservableObject {
     }
 
     /// Starts screen capture: shows the picker and lets the device press "Share Entire Screen".
-    /// The app must be in front. Returns true once capture is on.
-    func startSharing() async -> Bool {
+    /// The app must be in front. Returns true once capture is on. `bringForward` brings Mantiza
+    /// back to the front with the device (Search → Mantiza).
+    func startSharing(bringForward: (() async -> Bool)? = nil) async -> Bool {
         guard let capture else { return false }
         if capture.running { return true }
         guard calibrated else { note("Calibrate first (Device tab)"); return false }
@@ -171,14 +172,24 @@ final class Pointer: ObservableObject {
         capture.showPicker()
         try? await Task.sleep(for: .seconds(2))
         _ = await tap(pickerButton)
-        for i in 0..<16 {
+        var broughtBack = false
+        for i in 0..<24 {
             if capture.starts > before { return true }
-            // Debug runs 2026-11-12_131937 and _132024: one press, no start. Press once more after
-            // 3 s (the sheet may have been late), bringing Mantiza forward again if it went behind.
-            if i == 6 {
-                let front = UIApplication.shared.applicationState == .active
-                note("Screen sharing: no start after the first press (Mantiza \(front ? "in front" : "behind"), \(capture.state)); pressing again")
-                if !front { capture.showPicker(); try? await Task.sleep(for: .seconds(2)) }
+            let front = UIApplication.shared.applicationState == .active
+            // Mantiza behind after the press means iOS took the choice and went back to the app
+            // used before (sharing had begun), but Mantiza hears of it only once it is in front.
+            // Never show the picker again from there: it then offers the app in front ("share
+            // WhatsApp") and pressing it cancels the sharing that began (debug runs
+            // 2026-11-17_121427 and _125620). Bring Mantiza back and wait.
+            if !front, !broughtBack, i >= 2 {
+                broughtBack = true
+                note("Screen sharing: Mantiza went behind after the press (\(capture.state)); bringing it back")
+                if let bringForward { _ = await bringForward() }
+            }
+            // Mantiza still in front with nothing chosen: the sheet may have been late (debug runs
+            // 2026-11-12_131937 and _132024). Press once more, in the same sheet.
+            if i == 6, front, !broughtBack, capture.state == "Waiting for the picker…" {
+                note("Screen sharing: no start after the first press (Mantiza in front); pressing again")
                 _ = await tap(pickerButton)
             }
             try? await Task.sleep(for: .milliseconds(500))
