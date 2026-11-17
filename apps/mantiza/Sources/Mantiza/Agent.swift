@@ -56,6 +56,10 @@ final class Agent: ObservableObject {
     /// Confidence the fast brain needs to act alone. Speed round 2026-11-15, at the app's own image
     /// size (642 px wide): never wrong at ≥ 0.7 (66 of 82 tasks), wrong 4 times between 0.5 and 0.7.
     private let sure = 0.7
+    /// Steps that never use the device (no taps, keys or bringing Mantiza forward).
+    static let noDevice: Set<String> = ["answer", "phone_info", "event", "reminder"]
+    /// Steps that only work while Mantiza is on screen (links, torch, brightness).
+    static let needsFront: Set<String> = ["brightness", "flashlight", "directions"]
     private static let riskyWords = ["send", "pay", "buy", "order", "delete", "remove", "post", "share",
                                      "call", "confirm", "purchase", "transfer", "publish", "submit"]
 
@@ -115,18 +119,9 @@ final class Agent: ObservableObject {
         taskStart = Date()
         answers = []
 
-        if !link.ready {  // a dropped link often comes back at once (debug run 2026-11-10_193746)
-            status = "Connecting to the device…"
-            link.connect()
-            for _ in 0..<40 where !link.ready { try? await Task.sleep(for: .milliseconds(100)) }
-        }
-        guard link.ready else {
-            end(link.bluetooth == "On" ? "❌ Device not connected (Device tab)"
-                                       : "❌ Bluetooth is \(link.bluetooth.lowercased()) on this iPhone: turn it on so the device can connect")
-            return
-        }
-        guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
-        guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
+        // A dropped link often comes back at once (debug run 2026-11-10_193746): start reconnecting
+        // now, while planning; the device is only required once a step needs it.
+        if !link.ready { link.connect() }
 
         // 1. Plan: which steps iOS can do directly, which need the screen
         if !Net.online, PlanCache.get(request) == nil {
@@ -170,6 +165,21 @@ final class Agent: ObservableObject {
             return
         }
 
+        // The device: only when a step uses it (answers, phone facts, calendar and reminders don't).
+        if plan.steps.contains(where: { !Agent.noDevice.contains($0.action) }) {
+            if !link.ready {
+                status = "Connecting to the device…"
+                for _ in 0..<40 where !link.ready { try? await Task.sleep(for: .milliseconds(100)) }
+            }
+            guard link.ready else {
+                end(link.bluetooth == "On" ? "❌ Device not connected (Device tab)"
+                                           : "❌ Bluetooth is \(link.bluetooth.lowercased()) on this iPhone: turn it on so the device can connect")
+                return
+            }
+            guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
+            guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
+        }
+
         // 2. Do the steps in order
         for (i, step) in plan.steps.enumerated() {
             if stopRequested { end("⏹ Stopped"); return }
@@ -190,9 +200,22 @@ final class Agent: ObservableObject {
         guard let link else { return false }
         let opened = justOpened
         justOpened = nil
+        // Steps that only work with Mantiza on screen, and any step that will first show an iOS
+        // permission prompt: bring Mantiza forward here, once, for every route.
+        if Agent.needsFront.contains(step.action) || Direct.willAskPermission(for: step.action) {
+            guard await bringMantizaForward() else { return false }
+        }
         switch step.action {
         case "answer":
             add("💬 " + (step.text ?? ""))
+            return true
+
+        case "phone_info":
+            guard let fact = Direct.phoneInfo(step.info ?? "time", timezone: step.timezone) else {
+                end("❌ The iPhone can't tell \(step.info ?? "that") right now"); return false
+            }
+            answers.append(fact)
+            add("ℹ️ \(fact) (from the iPhone, no Siri)")
             return true
 
         case "screen":
@@ -235,8 +258,8 @@ final class Agent: ObservableObject {
 
         case "brightness":
             guard let v = step.value else { end("❌ How bright?"); return false }
-            Direct.brightness(v)
-            add(String(format: "Brightness set to %.0f%% (directly)", min(max(v, 0), 1) * 100))
+            guard Direct.brightness(v) else { end("❌ iOS didn't change the brightness"); return false }
+            add(String(format: "Brightness set to %.0f%% (directly, checked)", min(max(v, 0), 1) * 100))
             return true
 
         case "flashlight":
@@ -848,7 +871,7 @@ final class Agent: ObservableObject {
         if !quiet { status = "Starting screen sharing…" }
         let t = Date()
         guard await bringMantizaForward() else { return false }
-        guard await pointer.startSharing(bringForward: { await self.bringMantizaForward() }) else {
+        guard await pointer.startSharing() else {
             if quiet { add("Screen sharing didn't start yet (it is tried again when a step needs the screen)") }
             else { end("❌ Screen sharing didn't start") }
             return false
@@ -860,18 +883,10 @@ final class Agent: ObservableObject {
     /// Links and the torch only work while Mantiza is on screen. If it isn't, the device opens it.
     private func bringMantizaForward() async -> Bool {
         if await inFront() { return true }
-        guard let link else { return false }
-        await link.run("k cmd+space")
-        try? await Task.sleep(for: .milliseconds(700))
-        await link.run("k cmd+a")  // replace an earlier query, if Search kept one
-        await link.run("t Mantiza")
-        try? await Task.sleep(for: .milliseconds(600))
-        await link.run("k enter")
-        for _ in 0..<20 {
-            try? await Task.sleep(for: .milliseconds(150))
-            if UIApplication.shared.applicationState == .active { return true }
-        }
-        end("❌ Couldn't bring Mantiza to the front"); return false
+        if let pointer, await pointer.bringForward() { return true }
+        end(link?.ready == true ? "❌ Couldn't bring Mantiza to the front"
+                                : "❌ Mantiza is behind another app and the device isn't connected to bring it back")
+        return false
     }
 
     /// Taps a button by its exact text (e.g. "Call") if it shows up within a few seconds.
@@ -1917,7 +1932,7 @@ enum PlanCache {
         var build: String
     }
     private static let store = "planCache.v1"
-    private static let timeless: Set<String> = ["screen", "open_app", "siri", "key", "flashlight", "brightness",
+    private static let timeless: Set<String> = ["screen", "open_app", "siri", "key", "flashlight", "brightness", "phone_info",
                                                 "call", "whatsapp", "sms", "email", "directions", "timer"]
     private static let timeWords: Set<String> = [
         "today", "tomorrow", "tonight", "yesterday", "now", "next", "this", "last", "later", "week", "weekend", "month",

@@ -44,6 +44,9 @@ struct PlanStep: Codable {
     var question: String?             // screen steps: what to find out from the final screen
     var routine: String?              // the kind of screen task, for record-once replay
     var values: [String: String]?     // this task's values for the routine's {blanks}
+    // phone_info
+    var info: String?                 // "time", "date" or "battery"
+    var timezone: String?             // IANA zone for the time somewhere else ("Asia/Tokyo"), else nil
 
     var subtask: Subtask {
         Subtask(app: app, goal: goal ?? "", text: text, success_text: success_text, needs_approval: needs_approval,
@@ -55,7 +58,7 @@ struct PlanStep: Codable {
         var parts = [action]
         for v in [contact, phone, email, text.map { "\"\($0)\"" }, time, seconds.map { "\($0) s" }, start,
                   value.map { String(format: "%.0f%%", $0 * 100) }, on.map { $0 ? "on" : "off" }, key, destination,
-                  app, goal] {
+                  app, goal, info, timezone] {
             if let v, !v.isEmpty { parts.append(v) }
         }
         return parts.joined(separator: " · ")
@@ -186,9 +189,71 @@ enum Direct {
 
     // MARK: Screen and flashlight
 
-    /// Exact brightness; stays until the phone locks, even after Mantiza closes (Apple docs).
-    static func brightness(_ value: Double) {
-        UIScreen.main.brightness = CGFloat(min(max(value, 0), 1))
+    /// Exact brightness; stays until the phone locks, even after Mantiza closes (Apple docs). Only
+    /// works while Mantiza is on screen. Returns whether iOS took it.
+    static func brightness(_ value: Double) -> Bool {
+        let v = CGFloat(min(max(value, 0), 1))
+        UIScreen.main.brightness = v
+        return abs(UIScreen.main.brightness - v) < 0.02
+    }
+
+    // MARK: Facts the iPhone knows (no Siri, no screen, no internet)
+
+    /// "time" / "date" (here, or in an IANA time zone) and "battery". Nil if it can't be known.
+    static func phoneInfo(_ what: String, timezone: String?) -> String? {
+        let now = Date()
+        switch what.lowercased() {
+        case "time", "date", "day":
+            var zone = TimeZone.current
+            var place = ""
+            if let id = timezone, let z = TimeZone(identifier: id), z.identifier != TimeZone.current.identifier {
+                zone = z
+                place = " in " + (id.split(separator: "/").last.map { $0.replacingOccurrences(of: "_", with: " ") } ?? id)
+            }
+            let f = DateFormatter()
+            f.timeZone = zone
+            f.locale = .current
+            if what.lowercased() == "time" {
+                f.dateStyle = .none
+                f.timeStyle = .short
+                var text = "It's \(f.string(from: now))\(place)"
+                // Another day there: say which.
+                if !place.isEmpty {
+                    let d = DateFormatter()
+                    d.timeZone = zone
+                    d.dateFormat = "EEEE"
+                    let here = DateFormatter()
+                    here.dateFormat = "EEEE"
+                    if d.string(from: now) != here.string(from: now) { text += " (\(d.string(from: now)))" }
+                }
+                return text + "."
+            }
+            f.dateFormat = "EEEE, d MMMM yyyy"
+            return "It's \(f.string(from: now))\(place)."
+        case "battery":
+            UIDevice.current.isBatteryMonitoringEnabled = true
+            let level = UIDevice.current.batteryLevel
+            guard level >= 0 else { return nil }
+            let state = UIDevice.current.batteryState
+            let extra = state == .charging ? ", charging" : state == .full ? ", full" : ""
+            return "Battery is at \(Int((level * 100).rounded()))%\(extra)."
+        default:
+            return nil
+        }
+    }
+
+    // MARK: Permission prompts
+
+    /// Whether this action will first show an iOS permission prompt. Prompts show only while
+    /// Mantiza is on screen, so the task brings it forward first.
+    static func willAskPermission(for action: String) -> Bool {
+        switch action {
+        case "event": return EKEventStore.authorizationStatus(for: .event) == .notDetermined
+        case "reminder": return EKEventStore.authorizationStatus(for: .reminder) == .notDetermined
+        case "timer": return AlarmManager.shared.authorizationState == .notDetermined
+        case "call", "whatsapp", "sms", "email": return CNContactStore.authorizationStatus(for: .contacts) == .notDetermined
+        default: return false
+        }
     }
 
     /// Flashlight straight through the camera torch. Returns whether iOS says it is now as asked.

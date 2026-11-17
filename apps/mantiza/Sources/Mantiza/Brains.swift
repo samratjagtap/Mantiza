@@ -290,19 +290,26 @@ final class BigBrain {
         Now: \(f.string(from: now)), time zone \(TimeZone.current.identifier). Phone region: \(Locale.current.region?.identifier ?? "?").
         User request: "\(request)"
 
-        Split the request into steps, in order. ALWAYS use a direct action when one fits; use "screen" only
-        for what no direct action covers. Copy names and texts exactly from the request (never invent or translate).
+        Split the request into steps, in order. Copy names and texts exactly from the request (never invent or translate).
+        Routes cost very different amounts. ALWAYS take the cheapest route that gives the same result:
+          1. "answer" and "phone_info": instant, nothing happens on the phone.
+          2. The other direct actions: fast, through iOS.
+          3. "siri": Mantiza must start screen sharing to read Siri's reply (the user sees a sharing prompt).
+          4. "screen": screen sharing plus many AI taps; slowest.
+        A request that only talks or asks something you or the phone can answer never uses 3 or 4.
 
         Direct actions (fields in brackets):
-        - "answer" [text]: just reply, for questions you can answer yourself (facts, maths, advice, jokes).
-          Not for live data (weather, scores, time somewhere): use "siri".
-          Greetings and small talk ("hi", "hey what's up", "how are you", "thanks") are ALWAYS one "answer" step:
-          never "siri" or "screen".
+        - "answer" [text]: just reply: greetings and small talk ("hi", "hey what's up", "thanks"), facts, maths,
+          unit conversions, advice, jokes, and anything about the date or time you can work out from "Now" above.
+          Not for live data from the internet (weather, scores, prices, exchange rates, news): use "siri".
+        - "phone_info" [info: "time", "date" or "battery"; timezone: IANA id (e.g. "Asia/Tokyo") for the time or
+          date in another place, else null]: read straight from the iPhone. Use it for "what time is it",
+          "time in Tokyo", "what's the date", "how much battery do I have".
         - "siri" [text, state, state_value]: hand the request to the iPhone's own Siri, which does it inside iOS, fast.
           text: the request in plain English as you'd type it to Siri, complete and specific (names exactly as said).
           Use it for: phone settings (Wi-Fi on/off, mobile data, Airplane Mode, Dark Mode, Low Power Mode, Night Shift,
-          Do Not Disturb, a Focus, volume or brightness to a level), live info (weather, time in a city, sports scores,
-          unit or currency conversion), reading what's set ("what alarms do I have", "what's on my calendar today",
+          Do Not Disturb, a Focus, volume or brightness to a level), live info from the internet (weather, sports
+          scores, currency rates), reading what's set ("what alarms do I have", "what's on my calendar today",
           "what's my next event"), notes ("create a note ..."), playing music ("play <song/artist/playlist>" or
           "... on Spotify"), pausing/skipping music. state/state_value: if it turns one of these on/off:
           \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null.
