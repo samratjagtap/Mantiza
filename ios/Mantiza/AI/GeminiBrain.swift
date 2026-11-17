@@ -11,7 +11,7 @@ struct GeminiBrain: BigBrain {
     var name: String { "Gemini (\(model))" }
 
     func plan(_ request: String) async throws -> Subtask {
-        let fields = "Fields: goal (string), app (string or null), inputs (array of strings), verification (array of strings), allowed_risks (array, values from: \(Safety.riskKinds.sorted().joined(separator: ", "))), max_actions (integer), contact (string or null)."
+        let fields = "Fields: goal (string), app (string or null), inputs (array of strings), verification (array of strings), allowed_risks (array, values from: \(Safety.riskKinds.sorted().joined(separator: ", "))), max_actions (integer), contact (string or null), screen (string or null)."
         return try DecisionParser.subtask(try await ask(system: Prompts.planner + "\n" + fields, text: request, jpeg: nil))
     }
 
