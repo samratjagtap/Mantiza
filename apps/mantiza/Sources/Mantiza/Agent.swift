@@ -749,12 +749,33 @@ final class Agent: ObservableObject {
 
     // MARK: - Getting around
 
-    /// Home Screen: the device's Home key (Apple's consumer Home usage); ⌘H on older firmware.
-    private func goHome() async {
-        guard let link else { return }
+    /// Home Screen: the device's Home key (Apple's consumer Home usage); ⌘H on older firmware or when
+    /// the Home key didn't take Mantiza away. Checked when Mantiza was in front (2026-11-19: Home did
+    /// nothing, Siri opened over Mantiza and nothing noticed). Returns whether Mantiza left the screen
+    /// (true when it wasn't on screen to begin with: then it can't be checked here).
+    @discardableResult
+    private func goHome() async -> Bool {
+        guard let link else { return false }
+        let wasFront = UIApplication.shared.applicationState != .background
         let reply = await link.run("key home")
         if !reply.hasPrefix("ok") { await link.run("h") }
-        try? await Task.sleep(for: .milliseconds(700))
+        guard wasFront else { try? await Task.sleep(for: .milliseconds(700)); return true }
+        if await left(within: 1.2) { try? await Task.sleep(for: .milliseconds(300)); return true }
+        link.note("[task] Home key didn't leave Mantiza; trying ⌘H")
+        await link.run("h")
+        if await left(within: 1.2) { try? await Task.sleep(for: .milliseconds(300)); return true }
+        add("Couldn't go to the Home Screen (Mantiza stayed on screen)")
+        return false
+    }
+
+    /// Mantiza went behind (another app or the Home Screen is in front) within the time.
+    private func left(within limit: Double) async -> Bool {
+        let until = Date().addingTimeInterval(limit)
+        while Date() < until {
+            if UIApplication.shared.applicationState == .background { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return false
     }
 
     /// Opens an app by name: its own link when Mantiza is on screen (instant and exact), otherwise

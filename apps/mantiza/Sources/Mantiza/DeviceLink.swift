@@ -91,6 +91,9 @@ final class DeviceLink: NSObject, ObservableObject {
 
     // MARK: - Commands
 
+    /// Commands that only ask the device something (no keys, no pointer).
+    private static let queries: Set<String> = ["hello", "ping", "status", "battery", "version", "info"]
+
     /// Sends a command without waiting.
     func send(_ text: String) {
         guard let d = device, let c = writeChar, ready else { note("Not sent (device not ready): \(text)"); return }
@@ -101,6 +104,14 @@ final class DeviceLink: NSObject, ObservableObject {
     @discardableResult
     func run(_ text: String, timeout: Double = 20) async -> String {
         guard ready else { note("Not sent (device not ready): \(text)"); return "not ready" }
+        // The device's keys and typing go to whatever holds the keyboard. If one of Mantiza's own
+        // text fields still does (the chat box, a search field), Siri's or Search's box opens but
+        // the text lands in Mantiza (2026-11-19: "play some silent songs" typed into the chat box).
+        // Mantiza never types into itself, so before anything but a question to the device, let go.
+        if !DeviceLink.queries.contains(String(text.split(separator: " ").first ?? "")),
+           UIApplication.shared.applicationState != .background {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
         nextID += 1
         let id = nextID
         return await withCheckedContinuation { continuation in

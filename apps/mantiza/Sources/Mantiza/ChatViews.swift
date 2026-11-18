@@ -64,7 +64,7 @@ struct TaskView: View {
         .onAppear { ideas = Shared.suggestions(count: 4) }
         // A task started (typed, the mic, Siri, the widget): the field is empty again, like a chat.
         .onChange(of: agent.running) { _, running in
-            if running { request = "" } else { ideas = Shared.suggestions(count: 4) }
+            if running { request = ""; typing = false } else { ideas = Shared.suggestions(count: 4) }
         }
         // While listening, the words appear in the field as they are heard.
         .onChange(of: listener.heard) { _, heard in if listener.listening { request = heard } }
@@ -181,6 +181,7 @@ struct TaskView: View {
         guard !agent.running, !empty else { return }
         let text = request
         request = ""
+        typing = false
         listener.finish(run: false)
         agent.start(text)
     }
