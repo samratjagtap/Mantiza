@@ -51,6 +51,7 @@ struct MantizaApp: App {
             .environmentObject(agent)
             .environmentObject(agent.approvals)
             .environmentObject(agent.routines)
+            .environmentObject(agent.chats)
             .environmentObject(listener)
             .environmentObject(Voice.shared)
             .onAppear {
@@ -68,7 +69,6 @@ struct MantizaApp: App {
                 link.onStop = { [weak agent = agent] in agent?.stop() }
                 // What was said becomes the request and runs at once; its result is spoken.
                 listener.onDone = { text in
-                    request = text
                     if !agent.running { agent.start(text, byVoice: true) }
                 }
                 handle(inbox.take())  // Siri or a button started the app with something to do
@@ -84,7 +84,6 @@ struct MantizaApp: App {
             .onOpenURL { url in
                 tab = 0
                 if let prompt = Shared.prompt(from: url), !prompt.isEmpty {
-                    request = prompt
                     if !agent.running { agent.start(prompt) }
                 } else if url == Shared.listenURL {
                     handle(.listen)
@@ -108,7 +107,6 @@ struct MantizaApp: App {
             let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return }
             tab = 0
-            request = text
             if !agent.running { agent.start(text, byVoice: true) }  // it came through Siri: answer out loud
         case .listen:
             tab = 0

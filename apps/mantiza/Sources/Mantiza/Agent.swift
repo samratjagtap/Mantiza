@@ -25,6 +25,7 @@ final class Agent: ObservableObject {
     weak var pointer: Pointer?
     let approvals = Approvals()
     let routines = RoutineStore()
+    let chats = ChatStore()
 
     @Published var running = false
     @Published var status = "Ready" {
@@ -98,6 +99,10 @@ final class Agent: ObservableObject {
         link.send("task on")
         RunLog.shared.begin(request)
         spokenReply = ""
+        // The open chat's earlier messages, so a follow-up ("send it again") makes sense; then this
+        // request goes into the chat (from any entry point: typed, mic, Siri, widget).
+        let context = chats.context()
+        chats.begin(request)
         LiveStatus.shared.begin(request: request)
         // Ask iOS for extra time to keep running while other apps are in front.
         var keepAlive = UIBackgroundTaskIdentifier.invalid
@@ -111,6 +116,8 @@ final class Agent: ObservableObject {
             if keepAlive != .invalid { UIApplication.shared.endBackgroundTask(keepAlive) }
             RunLog.shared.finish(result: status, deviceLog: link.log)
             LiveStatus.shared.finish(status)
+            chats.finish(status: status, reply: spokenReply, steps: steps.map { ($0.text, $0.image) },
+                         seconds: Date().timeIntervalSince(taskStart))
             Voice.shared.say(result: status, reply: spokenReply, askedByVoice: askedByVoice)
             // The widget shows recent tasks and the last result.
             Shared.record(prompt: request, ok: status.hasPrefix("✅") || status.hasPrefix("💬"), result: status)
@@ -124,7 +131,9 @@ final class Agent: ObservableObject {
         if !link.ready { link.connect() }
 
         // 1. Plan: which steps iOS can do directly, which need the screen
-        if !Net.online, PlanCache.get(request) == nil {
+        // A remembered plan only for a request on its own: in a chat, "do it again" depends on what came before.
+        let cached = context.isEmpty ? PlanCache.get(request) : nil
+        if !Net.online, cached == nil {
             end("❌ No internet: Mantiza needs it to understand the request. Check Wi-Fi or mobile data")
             return
         }
@@ -136,11 +145,11 @@ final class Agent: ObservableObject {
         status = "Planning…"
         let t = Date()
         var plan: Plan
-        let remembered = PlanCache.get(request)
+        let remembered = cached
         if let remembered {
             plan = remembered
         } else {
-            do { plan = try await big.plan(request, known: routines.names) } catch {
+            do { plan = try await big.plan(request, known: routines.names, context: context) } catch {
                 end("❌ Couldn't plan: \(error.localizedDescription)"); return
             }
         }
@@ -191,7 +200,7 @@ final class Agent: ObservableObject {
         }
         spokenReply = answers.isEmpty ? (plan.reply ?? "") : answers.joined(separator: " ")
         end("✅ Done in " + seconds(since: taskStart) + " · " + spokenReply)
-        if remembered == nil { PlanCache.put(request, plan) }
+        if remembered == nil, context.isEmpty { PlanCache.put(request, plan) }
     }
 
     /// One plan step. Direct routes first; the screen loop when iOS has no direct way, or as the

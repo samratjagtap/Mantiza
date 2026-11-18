@@ -278,7 +278,10 @@ final class BigBrain {
 
     /// Turns the user's request into plan steps (text only, once per task). Direct iOS actions
     /// wherever iOS has one; "screen" steps (the AI loop) only for the rest.
-    func plan(_ request: String, known: [String] = []) async throws -> Plan {
+    func plan(_ request: String, known: [String] = [], context: [(request: String, reply: String)] = []) async throws -> Plan {
+        let earlier = context.isEmpty ? "" :
+            "Earlier in this chat (oldest first), only to understand words like \"it\", \"him\", \"again\", \"that\" in the request:\n"
+            + context.map { "  User: \"\($0.request)\"\n  Mantiza: \"\($0.reply.prefix(300))\"" }.joined(separator: "\n") + "\n"
         let now = Date()
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
@@ -288,7 +291,7 @@ final class BigBrain {
         It can do some things directly through iOS (fast and exact), and anything else by looking at the
         screen and tapping/typing like a person ("screen" steps, slower).
         Now: \(f.string(from: now)), time zone \(TimeZone.current.identifier). Phone region: \(Locale.current.region?.identifier ?? "?").
-        User request: "\(request)"
+        \(earlier)User request: "\(request)"
 
         Split the request into steps, in order. Copy names and texts exactly from the request (never invent or translate).
         Routes cost very different amounts. ALWAYS take the cheapest route that gives the same result:
