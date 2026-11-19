@@ -1,0 +1,11 @@
+{
+  "name": "app_launch",
+  "about": "Mantiza launches, connects to the stick and sees the pointer as ready.",
+  "steps": [
+    {"launch": true},
+    {"event": "app.start", "timeout": 15},
+    {"event": "board.up", "timeout": 30},
+    {"hands": "status"},
+    {"screen_has": ["Device"], "timeout": 10}
+  ]
+}

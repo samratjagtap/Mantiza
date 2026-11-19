@@ -1,0 +1,69 @@
+name: Mantiza
+options:
+  developmentLanguage: en
+  deploymentTarget:
+    iOS: "27.0"
+configFiles:
+  Debug: Config/Shared.xcconfig
+  Release: Config/Shared.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  Mantiza:
+    type: application
+    platform: iOS
+    sources:
+      - Mantiza
+      - Shared
+    dependencies:
+      - target: MantizaWidgets
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(MANTIZA_BUNDLE_ID)
+        PRODUCT_NAME: Mantiza
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Mantiza/Info.plist
+        # Info.plist goes through the C preprocessor so AccessorySetupKit keys can be switched on (MANTIZA_ASK = 1)
+        INFOPLIST_PREPROCESS: YES
+        INFOPLIST_PREPROCESSOR_DEFINITIONS: MANTIZA_ASK=$(MANTIZA_ASK)
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        CODE_SIGN_ENTITLEMENTS: $(MANTIZA_ENTITLEMENTS)
+  MantizaWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - MantizaWidgets
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(MANTIZA_BUNDLE_ID).widgets
+        PRODUCT_NAME: MantizaWidgets
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: MantizaWidgets/Info.plist
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: $(MANTIZA_WIDGET_ENTITLEMENTS)
+  MantizaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [MantizaTests]
+    dependencies:
+      - target: Mantiza
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(MANTIZA_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mantiza.app/Mantiza"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  Mantiza:
+    build:
+      targets:
+        Mantiza: all
+        MantizaTests: [test]
+    test:
+      targets: [MantizaTests]

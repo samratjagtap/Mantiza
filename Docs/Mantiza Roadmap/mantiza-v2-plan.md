@@ -568,7 +568,7 @@ Dates assume the team starts on 2026-11-02 _(estimate)_.
 ---
 
 ## 14. Legal note
-We write **our own code**. Existing projects ([P1][P2][P3]) are used only as **reference**. One of them ([P3]) has **no license**, so we must not copy its code at all; the others are MIT, with a GPL-3.0 AirPlay part in the original that we do not need. The Jev-based projects ([P34]–[P38]) are all MIT and used only as reference for design patterns; using Jev itself means accepting TypeSafe's terms [P33]. _(Not legal advice.)_
+We **reuse MIT-licensed code with attribution** (updated 2026-11-02; this replaces the earlier "reference only" rule). Parts of the firmware and the iOS Bluetooth, calibration and screen capture code are adapted from the MIT parts of [P1] and its forks [P2] and [P8]; each adapted file says "Based on ESP32 iPhone Agent by Henry Yuan", and the copyright and license text are in `THIRD_PARTY_NOTICES.md`. We never copy GPL code: not the GPL-3.0 AirPlay part of [P1] (`hardware/hid_bridge/src/airplay/`) and not `ananhq/anan-iphone-use`. [P3] has **no license**, so we do not copy its code at all. The Jev-based projects ([P34]–[P38]) are MIT and used only as reference for design patterns (subtask shape, risky-word filter); if we copy code from them, it gets the same attribution. Using Jev itself means accepting TypeSafe's terms [P33]. _(Not legal advice.)_
 
 ---
 
