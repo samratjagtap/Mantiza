@@ -13,6 +13,7 @@ struct DeviceView: View {
     @EnvironmentObject var pointer: Pointer
     @EnvironmentObject var routines: RoutineStore
     @EnvironmentObject var voice: Voice
+    @EnvironmentObject var agent: Agent
     @ObservedObject private var blocked = BlockedApps.shared
     @ObservedObject private var notes = AppNotes.shared
     @State private var habitRuns = Shared.history.count
@@ -147,7 +148,9 @@ struct DeviceView: View {
     private var setupCard: some View {
         Card("Set up", footer: "Screen sharing stays on between tasks; locking the phone stops it and the next task starts it again.") {
             Check(title: "StickS3 paired and connected", detail: "iPhone Settings → Bluetooth", done: link.ready)
-            Check(title: "AssistiveTouch on", detail: "Settings → Accessibility → Touch → AssistiveTouch", done: assistiveTouch)
+            Check(title: "AssistiveTouch on", detail: "Mantiza asks Siri to turn it on (Type to Siri must be on), or Settings → Accessibility → Touch → AssistiveTouch",
+                  done: assistiveTouch,
+                  action: link.ready && !agent.running ? ("Turn on", { agent.turnOnAssistiveTouch() }) : nil)
             Check(title: "Pointer calibrated", detail: "The StickS3 clicks 3 spots; don't touch the screen", done: pointer.calibrated)
             NavRow(icon: "questionmark.circle", title: "More help", page: Page.setup)
         }
@@ -157,18 +160,25 @@ struct DeviceView: View {
 
     private var settings: some View {
         Card("Mantiza") {
-            HStack(spacing: 12) {
-                Icon("speaker.wave.2")
-                Text("Speak results").font(Theme.sans(15)).foregroundStyle(Theme.text)
-                Spacer()
+            // A menu row: one line, short value, the full choices in the menu.
+            Menu {
                 Picker("Speak results", selection: $voice.mode) {
                     ForEach(SpeakMode.allCases) { Text($0.label).tag($0) }
                 }
-                .pickerStyle(.menu)
-                .tint(Theme.dim)
+            } label: {
+                HStack(spacing: 12) {
+                    Icon("speaker.wave.2")
+                    Text("Speak results").font(Theme.sans(15)).foregroundStyle(Theme.text).lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(voice.mode.short).font(Theme.sans(15)).foregroundStyle(Theme.dim).lineLimit(1).fixedSize()
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.dim.opacity(0.7))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
+            .buttonStyle(PressRow())
             NavRow(icon: "arrow.triangle.2.circlepath", title: "Learned routines", value: count(routines.all.count), page: Page.routines)
             NavRow(icon: "note.text", title: "App notes", value: count(notes.all.count), page: Page.notes)
             NavRow(icon: "hand.raised", title: "Blocked apps", value: "\(blocked.names.count)", page: Page.blocked)
@@ -253,6 +263,7 @@ private struct Check: View {
     let title: String
     let detail: String
     let done: Bool
+    var action: (String, () -> Void)? = nil
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
@@ -263,6 +274,14 @@ private struct Check: View {
                 if !done { Text(detail).font(Theme.sans(12)).foregroundStyle(Theme.dim) }
             }
             Spacer(minLength: 0)
+            if !done, let action {
+                Button(action.0, action: action.1)
+                    .font(Theme.sans(13, .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Theme.magenta, in: Capsule())
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)

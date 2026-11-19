@@ -64,10 +64,27 @@ final class Agent: ObservableObject {
     private static let riskyWords = ["send", "pay", "buy", "order", "delete", "remove", "post", "share",
                                      "call", "confirm", "purchase", "transfer", "publish", "submit"]
 
-    func start(_ request: String, byVoice: Bool = false) {
+    func start(_ request: String, byVoice: Bool = false, plan: Plan? = nil) {
         guard !running else { return }
         askedByVoice = byVoice
-        Task { await run(request.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        Task { await run(request.trimmingCharacters(in: .whitespacesAndNewlines), preset: plan) }
+    }
+
+    /// Turns AssistiveTouch on through Siri (iOS has no API for apps to do it; Siri can, and the
+    /// device types to Siri with its keyboard, which works without AssistiveTouch). Checked with iOS.
+    func turnOnAssistiveTouch() {
+        start("Turn on AssistiveTouch", plan: Plan(reply: "AssistiveTouch is on.", steps: [Agent.assistiveTouchStep]))
+    }
+
+    static let assistiveTouchStep = PlanStep(action: "siri", text: "Turn on AssistiveTouch",
+                                             state: "assistive_touch", state_value: true)
+
+    /// A step that only needs the device's keyboard: its keys, or Siri changing a setting iOS reports
+    /// back (no screen sharing, no taps, so no pointer and no AssistiveTouch needed).
+    static func keyboardOnly(_ step: PlanStep) -> Bool {
+        if step.action == "key" { return true }
+        if step.action == "siri", let s = step.state, step.state_value != nil, PhoneState.names.contains(s) { return true }
+        return false
     }
 
     func stop() {
@@ -91,7 +108,7 @@ final class Agent: ObservableObject {
 
     // MARK: - The task
 
-    private func run(_ request: String) async {
+    private func run(_ request: String, preset: Plan? = nil) async {
         guard let link, let pointer else { return }
         running = true
         stopRequested = false
@@ -132,7 +149,7 @@ final class Agent: ObservableObject {
 
         // 1. Plan: which steps iOS can do directly, which need the screen
         // A remembered plan only for a request on its own: in a chat, "do it again" depends on what came before.
-        let cached = context.isEmpty ? PlanCache.get(request) : nil
+        let cached = preset ?? (context.isEmpty ? PlanCache.get(request) : nil)
         if !Net.online, cached == nil {
             end("❌ No internet: Mantiza needs it to understand the request. Check Wi-Fi or mobile data")
             return
@@ -186,7 +203,21 @@ final class Agent: ObservableObject {
                 return
             }
             guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
-            guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
+            // Taps (and screen sharing, whose sheet the device presses) need the pointer, and iOS
+            // only shows a pointer with AssistiveTouch on: switch it on through Siri first.
+            if plan.steps.contains(where: { !Agent.noDevice.contains($0.action) && !Agent.keyboardOnly($0) }) {
+                guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
+                if !UIAccessibility.isAssistiveTouchRunning {
+                    add("AssistiveTouch is off (taps need it): asking Siri to turn it on")
+                    guard case .done = await askSiri("Turn on AssistiveTouch", state: "assistive_touch", stateValue: true) else {
+                        if !status.hasPrefix("❌") {
+                            end("❌ AssistiveTouch is off and Siri didn't turn it on. Turn it on in Settings → Accessibility → Touch → AssistiveTouch, or check Type to Siri is on")
+                        }
+                        return
+                    }
+                    add("AssistiveTouch on (by Siri, checked with iOS)")
+                }
+            }
         }
 
         // 2. Do the steps in order
@@ -200,7 +231,7 @@ final class Agent: ObservableObject {
         }
         spokenReply = answers.isEmpty ? (plan.reply ?? "") : answers.joined(separator: " ")
         end("✅ Done in " + seconds(since: taskStart) + " · " + spokenReply)
-        if remembered == nil, context.isEmpty { PlanCache.put(request, plan) }
+        if remembered == nil, preset == nil, context.isEmpty { PlanCache.put(request, plan) }
     }
 
     /// One plan step. Direct routes first; the screen loop when iOS has no direct way, or as the
@@ -520,6 +551,11 @@ final class Agent: ObservableObject {
     /// then Escape closes Siri. Tested by hand on the iPhone 14 Plus (iOS 27, Siri Classic), 2026-11-14.
     func askSiri(_ request: String, expectAny: [String] = [], state: String? = nil, stateValue: Bool? = nil) async -> SiriOutcome {
         guard let link, let capture else { return .failed("no device") }
+        // A setting iOS reports back (flashlight, Low Power Mode, Dark Mode, AssistiveTouch) needs no
+        // screen: type to Siri and check with iOS. No sharing prompt, and no AssistiveTouch needed.
+        if let state, let want = stateValue, PhoneState.read(state) != nil {
+            return await askSiriByKeyboard(request, state: state, want: want)
+        }
         if !capture.running { guard await startEyes() else { return .failed("screen sharing didn't start") } }
         status = "Asking Siri…"
         let t = Date()
@@ -605,6 +641,36 @@ final class Agent: ObservableObject {
         add("Siri answered in \(seconds(since: t))", image: shot)
         await link.run("k esc")
         return .done(reply)
+    }
+
+    /// Siri with the keyboard only, for a setting iOS reports back. Siri opens over Mantiza (in
+    /// front, holding no text field), so if Siri's box doesn't open the typing goes nowhere, and
+    /// Enter does nothing. The result is read from iOS, not the screen.
+    private func askSiriByKeyboard(_ request: String, state: String, want: Bool) async -> SiriOutcome {
+        guard let link else { return .failed("no device") }
+        let name = state.replacingOccurrences(of: "_", with: " ")
+        if PhoneState.read(state) == want { return .done("\(name) was already \(want ? "on" : "off")") }
+        status = "Asking Siri…"
+        let t = Date()
+        guard await bringMantizaForward() else { return .failed("Mantiza couldn't come to the front") }
+        guard (await link.run("keyhold siri 1000")).hasPrefix("ok") else {
+            return .failed("the device can't hold the Siri key: update its firmware")
+        }
+        try? await Task.sleep(for: .milliseconds(900))
+        await type(request)
+        await link.run("k enter")
+        var done = false
+        for _ in 0..<24 where !done {
+            try? await Task.sleep(for: .milliseconds(250))
+            done = PhoneState.read(state) == want
+        }
+        if done { try? await Task.sleep(for: .milliseconds(600)) }  // let Siri finish its sentence
+        await link.run("k esc")
+        guard done else {
+            return .failed("iOS says \(name) isn't \(want ? "on" : "off"). Is Type to Siri on? (Settings → Accessibility → Siri)")
+        }
+        add("Siri turned \(name) \(want ? "on" : "off") in \(seconds(since: t)) (checked with iOS, no screen needed)")
+        return .done("\(name) is \(want ? "on" : "off")")
     }
 
     /// The screen's text lines, normalised.

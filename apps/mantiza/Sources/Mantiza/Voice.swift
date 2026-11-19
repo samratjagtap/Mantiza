@@ -13,6 +13,15 @@ enum SpeakMode: String, CaseIterable, Identifiable {
     case always
     case never
     var id: String { rawValue }
+    /// For the settings row (one line).
+    var short: String {
+        switch self {
+        case .voice: return "By voice"
+        case .always: return "Always"
+        case .never: return "Never"
+        }
+    }
+
     var label: String {
         switch self {
         case .voice: return "When I ask by voice"
