@@ -126,7 +126,9 @@ final class Agent: ObservableObject {
             LiveStatus.shared.finish(status)
             chats.finish(status: status, reply: spokenReply, steps: steps.map { ($0.text, $0.image) },
                          seconds: Date().timeIntervalSince(taskStart))
-            Voice.shared.say(result: status, reply: spokenReply, askedByVoice: askedByVoice)
+            // A soft sound for done or failed (whatever started the task), then the spoken result.
+            let chime = Chime.shared.play(result: status)
+            Voice.shared.say(result: status, reply: spokenReply, askedByVoice: askedByVoice, after: chime)
             // The widget shows recent tasks and the last result.
             Shared.record(prompt: request, ok: status.hasPrefix("✅") || status.hasPrefix("💬"), result: status)
             WidgetCenter.shared.reloadAllTimelines()

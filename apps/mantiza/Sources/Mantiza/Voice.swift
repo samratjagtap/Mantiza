@@ -45,11 +45,21 @@ final class Voice: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
         synth.delegate = self
     }
 
-    /// Says a task's result, if the setting allows it.
-    func say(result status: String, reply: String, askedByVoice: Bool) {
+    /// Speaking now, or about to (waiting for the result sound to finish).
+    var speaking: Bool { synth.isSpeaking || waiting }
+    private var waiting = false
+
+    /// Says a task's result, if the setting allows it, `after` seconds (the result sound first).
+    func say(result status: String, reply: String, askedByVoice: Bool, after: Double = 0) {
         guard mode == .always || (mode == .voice && askedByVoice) else { return }
         guard let text = Voice.spoken(status: status, reply: reply) else { return }
-        speak(text)
+        guard after > 0 else { speak(text); return }
+        waiting = true
+        Task {
+            try? await Task.sleep(for: .seconds(after))
+            waiting = false
+            speak(text)
+        }
     }
 
     func speak(_ text: String) {

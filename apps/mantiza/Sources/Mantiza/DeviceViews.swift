@@ -13,6 +13,7 @@ struct DeviceView: View {
     @EnvironmentObject var pointer: Pointer
     @EnvironmentObject var routines: RoutineStore
     @EnvironmentObject var voice: Voice
+    @ObservedObject private var chime = Chime.shared
     @ObservedObject private var blocked = BlockedApps.shared
     @ObservedObject private var notes = AppNotes.shared
     @State private var habitRuns = Shared.history.count
@@ -199,6 +200,17 @@ struct DeviceView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(PressRow())
+            HStack(spacing: 12) {
+                Icon("bell")
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Sounds").font(Theme.sans(15)).foregroundStyle(Theme.text)
+                    Text("A soft sound when a task is done or fails").font(Theme.sans(12)).foregroundStyle(Theme.dim)
+                }
+                Spacer(minLength: 8)
+                Toggle("Sounds", isOn: $chime.on).labelsHidden().tint(Theme.green)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             NavRow(icon: "arrow.triangle.2.circlepath", title: "Learned routines", value: count(routines.all.count), page: Page.routines)
             NavRow(icon: "note.text", title: "App notes", value: count(notes.all.count), page: Page.notes)
             NavRow(icon: "hand.raised", title: "Blocked apps", value: "\(blocked.names.count)", page: Page.blocked)
