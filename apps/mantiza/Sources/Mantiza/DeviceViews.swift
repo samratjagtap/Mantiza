@@ -20,7 +20,10 @@ struct DeviceView: View {
     enum Page: Hashable { case setup, routines, notes, blocked, habits }
 
     private var bluetoothOn: Bool { link.bluetooth.lowercased().contains("on") }
-    private var setupMissing: Bool { !link.ready || !pointer.calibrated }
+    // Setup steps iOS can't check (AssistiveTouch's status was wrong on iOS 27): the user ticks them.
+    @AppStorage("setup.assistiveTouch") private var assistiveTouchDone = false
+    @AppStorage("setup.typeToSiri") private var typeToSiriDone = false
+    private var setupDone: Int { [link.ready, assistiveTouchDone, typeToSiriDone, pointer.calibrated].filter { $0 }.count }
 
     var body: some View {
         NavigationStack {
@@ -28,7 +31,7 @@ struct DeviceView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     ScreenTitle(text: "Device")
                     deviceCard
-                    if setupMissing { setupCard }
+                    setupRow
                     settings
                     brains
                 }
@@ -137,16 +140,40 @@ struct DeviceView: View {
         }
     }
 
-    // MARK: Setup (only while something is missing)
+    // MARK: Setup: its own card above the settings, so it is easy to find
 
-    private var setupCard: some View {
-        Card("Set up", footer: "Screen sharing stays on between tasks; locking the phone stops it and the next task starts it again.") {
-            Check(title: "StickS3 paired and connected", detail: "iPhone Settings → Bluetooth", done: link.ready)
-            Todo(title: "Turn on AssistiveTouch", detail: "Settings → Accessibility → Touch → AssistiveTouch. The StickS3's pointer only shows with it on.")
-            Todo(title: "Turn on Type to Siri", detail: "Settings → Accessibility → Siri → Type to Siri. Mantiza types its Siri requests.")
-            Check(title: "Pointer calibrated", detail: "The StickS3 clicks 3 spots; don't touch the screen", done: pointer.calibrated)
-            NavRow(icon: "questionmark.circle", title: "More help", page: Page.setup)
+    private var setupRow: some View {
+        let all = setupDone == 4
+        return NavigationLink(value: Page.setup) {
+            HStack(spacing: 12) {
+                Image(systemName: all ? "checkmark.seal" : "checklist")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(all ? Theme.green : Theme.text)
+                    .frame(width: 34, height: 34)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Setup and help").font(Theme.sans(16, .semibold)).foregroundStyle(Theme.text)
+                    Text(all ? "All set" : "\(setupDone) of 4 done").font(Theme.sans(12)).foregroundStyle(Theme.dim)
+                }
+                Spacer()
+                if all {
+                    Dot(on: true)
+                } else {
+                    Text("\(4 - setupDone) left")
+                        .font(Theme.sans(12, .semibold)).foregroundStyle(.white)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .background(Theme.magenta, in: Capsule())
+                }
+                Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.dim.opacity(0.7))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous)
+                .stroke(all ? Theme.line : Theme.magenta.opacity(0.5), lineWidth: all ? 0.5 : 1))
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
 
     // MARK: Settings and memory
@@ -176,9 +203,6 @@ struct DeviceView: View {
             NavRow(icon: "note.text", title: "App notes", value: count(notes.all.count), page: Page.notes)
             NavRow(icon: "hand.raised", title: "Blocked apps", value: "\(blocked.names.count)", page: Page.blocked)
             NavRow(icon: "clock", title: "Habits", value: count(habitRuns), page: Page.habits)
-            if !setupMissing {
-                NavRow(icon: "questionmark.circle", title: "Setup and help", page: Page.setup)
-            }
         }
     }
 
@@ -256,37 +280,35 @@ private struct Check: View {
     let title: String
     let detail: String
     let done: Bool
+    /// A step Mantiza can't check: tapping the row ticks or unticks it.
+    var toggle: (() -> Void)? = nil
     var body: some View {
+        if let toggle {
+            Button { withAnimation(.easeOut(duration: 0.15)) { toggle() } } label: { row }
+                .buttonStyle(PressRow())
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 18))
+                .font(.system(size: 20))
                 .foregroundStyle(done ? Theme.green : Theme.dim)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(Theme.sans(15)).foregroundStyle(done ? Theme.dim : Theme.text)
-                if !done { Text(detail).font(Theme.sans(12)).foregroundStyle(Theme.dim) }
+                if !done {
+                    Text(detail + (toggle == nil ? "" : " Tap to tick when done."))
+                        .font(Theme.sans(12)).foregroundStyle(Theme.dim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-    }
-}
-
-/// A setup step Mantiza can't check: what to turn on, and where.
-private struct Todo: View {
-    let title: String
-    let detail: String
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "gearshape").font(.system(size: 16)).foregroundStyle(Theme.dim).frame(width: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(Theme.sans(15)).foregroundStyle(Theme.text)
-                Text(detail).font(Theme.sans(12)).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
+        .contentShape(Rectangle())
     }
 }
 
@@ -336,13 +358,20 @@ private struct Empty: View {
 
 private struct SetupPage: View {
     @EnvironmentObject var link: DeviceLink
+    @EnvironmentObject var pointer: Pointer
+    @AppStorage("setup.assistiveTouch") private var assistiveTouchDone = false
+    @AppStorage("setup.typeToSiri") private var typeToSiriDone = false
     var body: some View {
         Page(title: "Setup and help") {
-            Card("Set up once") {
-                Todo(title: "1. Pair the StickS3", detail: "Settings → Bluetooth → Mantiza. It works as the iPhone's mouse and keyboard.")
-                Todo(title: "2. Turn on AssistiveTouch", detail: "Settings → Accessibility → Touch → AssistiveTouch. The pointer only shows with it on.")
-                Todo(title: "3. Turn on Type to Siri", detail: "Settings → Accessibility → Siri → Type to Siri. Mantiza types its Siri requests.")
-                Todo(title: "4. Calibrate the pointer", detail: "Device tab → Calibrate. The StickS3 clicks 3 spots; don't touch the screen.")
+            Card("Set up once", footer: "Steps 1 and 4 tick themselves. iOS can't tell Mantiza about 2 and 3, so tick them when you've turned them on.") {
+                Check(title: "1. Pair the StickS3", detail: "Settings → Bluetooth → Mantiza. It works as the iPhone's mouse and keyboard.",
+                      done: link.ready)
+                Check(title: "2. Turn on AssistiveTouch", detail: "Settings → Accessibility → Touch → AssistiveTouch. The pointer only shows with it on.",
+                      done: assistiveTouchDone, toggle: { assistiveTouchDone.toggle() })
+                Check(title: "3. Turn on Type to Siri", detail: "Settings → Accessibility → Siri → Type to Siri. Mantiza types its Siri requests.",
+                      done: typeToSiriDone, toggle: { typeToSiriDone.toggle() })
+                Check(title: "4. Calibrate the pointer", detail: "Device tab → Calibrate. The StickS3 clicks 3 spots; don't touch the screen.",
+                      done: pointer.calibrated)
             }
             Card("StickS3") {
                 Row(key: "Bluetooth", value: link.bluetooth, dot: link.bluetooth.lowercased().contains("on"))
