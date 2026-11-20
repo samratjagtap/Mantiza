@@ -13,16 +13,14 @@ struct DeviceView: View {
     @EnvironmentObject var pointer: Pointer
     @EnvironmentObject var routines: RoutineStore
     @EnvironmentObject var voice: Voice
-    @EnvironmentObject var agent: Agent
     @ObservedObject private var blocked = BlockedApps.shared
     @ObservedObject private var notes = AppNotes.shared
     @State private var habitRuns = Shared.history.count
-    @State private var assistiveTouch = UIAccessibility.isAssistiveTouchRunning
 
     enum Page: Hashable { case setup, routines, notes, blocked, habits }
 
     private var bluetoothOn: Bool { link.bluetooth.lowercased().contains("on") }
-    private var setupMissing: Bool { !link.ready || !assistiveTouch || !pointer.calibrated }
+    private var setupMissing: Bool { !link.ready || !pointer.calibrated }
 
     var body: some View {
         NavigationStack {
@@ -51,11 +49,7 @@ struct DeviceView: View {
         }
         .tint(Theme.text)
         .fullScreenCover(isPresented: $pointer.calibrating) { CalibrationCatcher() }
-        .onReceive(NotificationCenter.default.publisher(for: UIAccessibility.assistiveTouchStatusDidChangeNotification)) { _ in
-            assistiveTouch = UIAccessibility.isAssistiveTouchRunning
-        }
         .onAppear {
-            assistiveTouch = UIAccessibility.isAssistiveTouchRunning
             habitRuns = Shared.history.count
         }
     }
@@ -148,9 +142,8 @@ struct DeviceView: View {
     private var setupCard: some View {
         Card("Set up", footer: "Screen sharing stays on between tasks; locking the phone stops it and the next task starts it again.") {
             Check(title: "StickS3 paired and connected", detail: "iPhone Settings → Bluetooth", done: link.ready)
-            Check(title: "AssistiveTouch on", detail: "Mantiza asks Siri to turn it on (Type to Siri must be on), or Settings → Accessibility → Touch → AssistiveTouch",
-                  done: assistiveTouch,
-                  action: link.ready && !agent.running ? ("Turn on", { agent.turnOnAssistiveTouch() }) : nil)
+            Todo(title: "Turn on AssistiveTouch", detail: "Settings → Accessibility → Touch → AssistiveTouch. The StickS3's pointer only shows with it on.")
+            Todo(title: "Turn on Type to Siri", detail: "Settings → Accessibility → Siri → Type to Siri. Mantiza types its Siri requests.")
             Check(title: "Pointer calibrated", detail: "The StickS3 clicks 3 spots; don't touch the screen", done: pointer.calibrated)
             NavRow(icon: "questionmark.circle", title: "More help", page: Page.setup)
         }
@@ -263,7 +256,6 @@ private struct Check: View {
     let title: String
     let detail: String
     let done: Bool
-    var action: (String, () -> Void)? = nil
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: done ? "checkmark.circle.fill" : "circle")
@@ -274,14 +266,24 @@ private struct Check: View {
                 if !done { Text(detail).font(Theme.sans(12)).foregroundStyle(Theme.dim) }
             }
             Spacer(minLength: 0)
-            if !done, let action {
-                Button(action.0, action: action.1)
-                    .font(Theme.sans(13, .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Theme.magenta, in: Capsule())
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+}
+
+/// A setup step Mantiza can't check: what to turn on, and where.
+private struct Todo: View {
+    let title: String
+    let detail: String
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "gearshape").font(.system(size: 16)).foregroundStyle(Theme.dim).frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(Theme.sans(15)).foregroundStyle(Theme.text)
+                Text(detail).font(Theme.sans(12)).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -336,13 +338,16 @@ private struct SetupPage: View {
     @EnvironmentObject var link: DeviceLink
     var body: some View {
         Page(title: "Setup and help") {
-            Card("StickS3", footer: "Pair it in iPhone Settings → Bluetooth; it works as the iPhone's mouse and keyboard.") {
+            Card("Set up once") {
+                Todo(title: "1. Pair the StickS3", detail: "Settings → Bluetooth → Mantiza. It works as the iPhone's mouse and keyboard.")
+                Todo(title: "2. Turn on AssistiveTouch", detail: "Settings → Accessibility → Touch → AssistiveTouch. The pointer only shows with it on.")
+                Todo(title: "3. Turn on Type to Siri", detail: "Settings → Accessibility → Siri → Type to Siri. Mantiza types its Siri requests.")
+                Todo(title: "4. Calibrate the pointer", detail: "Device tab → Calibrate. The StickS3 clicks 3 spots; don't touch the screen.")
+            }
+            Card("StickS3") {
                 Row(key: "Bluetooth", value: link.bluetooth, dot: link.bluetooth.lowercased().contains("on"))
                 Row(key: "Connection", value: link.status, dot: link.ready)
                 ActionRow(title: "Connect again", color: Theme.green) { link.connect() }
-            }
-            Card("Siri", footer: "Mantiza hands Siri's jobs to Siri by typing to it. Settings → Accessibility → Siri → Type to Siri must be on.") {
-                Row(key: "Type to Siri", value: "Turn on in Settings")
             }
             Card("Screen sharing", footer: "Mantiza starts it only when a task needs to see the screen. It stays on between tasks; locking the phone stops it.") {
                 Row(key: "When", value: "Only when needed")

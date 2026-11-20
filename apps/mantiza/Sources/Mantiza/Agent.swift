@@ -70,17 +70,8 @@ final class Agent: ObservableObject {
         Task { await run(request.trimmingCharacters(in: .whitespacesAndNewlines), preset: plan) }
     }
 
-    /// Turns AssistiveTouch on through Siri (iOS has no API for apps to do it; Siri can, and the
-    /// device types to Siri with its keyboard, which works without AssistiveTouch). Checked with iOS.
-    func turnOnAssistiveTouch() {
-        start("Turn on AssistiveTouch", plan: Plan(reply: "AssistiveTouch is on.", steps: [Agent.assistiveTouchStep]))
-    }
-
-    static let assistiveTouchStep = PlanStep(action: "siri", text: "Turn on AssistiveTouch",
-                                             state: "assistive_touch", state_value: true)
-
     /// A step that only needs the device's keyboard: its keys, or Siri changing a setting iOS reports
-    /// back (no screen sharing, no taps, so no pointer and no AssistiveTouch needed).
+    /// back (no screen sharing, no taps, so no pointer needed).
     static func keyboardOnly(_ step: PlanStep) -> Bool {
         if step.action == "key" { return true }
         if step.action == "siri", let s = step.state, step.state_value != nil, PhoneState.names.contains(s) { return true }
@@ -203,20 +194,9 @@ final class Agent: ObservableObject {
                 return
             }
             guard await link.confirmDevice() else { end("❌ The device doesn't answer. Device tab → Connect again"); return }
-            // Taps (and screen sharing, whose sheet the device presses) need the pointer, and iOS
-            // only shows a pointer with AssistiveTouch on: switch it on through Siri first.
+            // Taps (and screen sharing, whose sheet the device presses) need the calibrated pointer.
             if plan.steps.contains(where: { !Agent.noDevice.contains($0.action) && !Agent.keyboardOnly($0) }) {
                 guard pointer.calibrated else { end("❌ Calibrate the pointer first (Device tab)"); return }
-                if !UIAccessibility.isAssistiveTouchRunning {
-                    add("AssistiveTouch is off (taps need it): asking Siri to turn it on")
-                    guard case .done = await askSiri("Turn on AssistiveTouch", state: "assistive_touch", stateValue: true) else {
-                        if !status.hasPrefix("❌") {
-                            end("❌ AssistiveTouch is off and Siri didn't turn it on. Turn it on in Settings → Accessibility → Touch → AssistiveTouch, or check Type to Siri is on")
-                        }
-                        return
-                    }
-                    add("AssistiveTouch on (by Siri, checked with iOS)")
-                }
             }
         }
 
@@ -551,8 +531,8 @@ final class Agent: ObservableObject {
     /// then Escape closes Siri. Tested by hand on the iPhone 14 Plus (iOS 27, Siri Classic), 2026-11-14.
     func askSiri(_ request: String, expectAny: [String] = [], state: String? = nil, stateValue: Bool? = nil) async -> SiriOutcome {
         guard let link, let capture else { return .failed("no device") }
-        // A setting iOS reports back (flashlight, Low Power Mode, Dark Mode, AssistiveTouch) needs no
-        // screen: type to Siri and check with iOS. No sharing prompt, and no AssistiveTouch needed.
+        // A setting iOS reports back (flashlight, Low Power Mode, Dark Mode) needs no screen: type to
+        // Siri and check with iOS. No sharing prompt.
         if let state, let want = stateValue, PhoneState.read(state) != nil {
             return await askSiriByKeyboard(request, state: state, want: want)
         }

@@ -7,7 +7,7 @@ import UIKit
 /// or rotation lock; those are checked by the fast brain from the screen.
 enum PhoneState {
     /// Names the planner may use in a subtask's "state".
-    static let names = ["flashlight", "low_power_mode", "dark_mode", "assistive_touch"]
+    static let names = ["flashlight", "low_power_mode", "dark_mode"]
 
     /// The current value, or nil if this setting can't be read.
     @MainActor
@@ -18,8 +18,6 @@ enum PhoneState {
             return camera.isTorchActive
         case "low_power_mode":
             return ProcessInfo.processInfo.isLowPowerModeEnabled
-        case "assistive_touch":
-            return UIAccessibility.isAssistiveTouchRunning
         case "dark_mode":
             let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene
             guard let style = scene?.traitCollection.userInterfaceStyle, style != .unspecified else { return nil }
