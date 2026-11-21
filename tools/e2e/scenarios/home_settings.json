@@ -1,0 +1,51 @@
+{
+  "name": "home_settings",
+  "about": "Stick + Mac only (no app needed): go Home, open Settings by Spotlight, tap General, check it opened. On iOS 27 Enter does not open the top Spotlight hit, so the result is tapped.",
+  "steps": [
+    {
+      "hands": "home"
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "hands": "key cmd+space"
+    },
+    {
+      "sleep": 0.8
+    },
+    {
+      "hands": "type Settings"
+    },
+    {
+      "sleep": 2
+    },
+    {
+      "tap_text": "Settings",
+      "above": 0.85
+    },
+    {
+      "back_until": [
+        "Wi-Fi"
+      ],
+      "max": 4
+    },
+    {
+      "scroll_until": "General",
+      "max": 4
+    },
+    {
+      "tap_text": "General"
+    },
+    {
+      "screen_has": [
+        "About",
+        "Software Update"
+      ],
+      "timeout": 8
+    },
+    {
+      "hands": "home"
+    }
+  ]
+}
