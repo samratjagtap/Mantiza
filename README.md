@@ -111,7 +111,6 @@ These don't affect Mantiza: Customize Top Level Menu, Custom Actions (Single-Tap
 </details>
 
 ## Legend
-
 The Mantiza docs mark each item against Artemis:
 
 | Marker | Meaning |
