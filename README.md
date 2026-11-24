@@ -107,7 +107,7 @@ If you only want AssistiveTouch while using Mantiza:
 <details>
 <summary>Settings you can ignore</summary>
 
-These don't affect Mantiza: Customize Top Level Menu, Custom Actions (Single-Tap, Double-Tap, Long Press), Custom Gestures, Mouse Keys, Use Game Controller, Sound Actions, and Dwell's own options (Fallback Action, Movement Tolerance, Hot Corners, Keyboard, seconds). The Dwell options only work when Dwell Control is on, and it must stay off.
+These don't affect Mantiza: Customize Top Level Menu, Custom Actions (Single-Tap, Double-Tap, Long Press), Custom Gestures, Mouse Keys, Use Game Controller, Sound Actions, and Dwell's own options (Fallback Action, Movement Tolerance, Hot Corners, Keyboard, seconds). The Dwell options only work when Dwell Control is on, and it must stay off
 </details>
 
 ## Legend
