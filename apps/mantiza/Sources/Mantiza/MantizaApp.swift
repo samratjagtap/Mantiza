@@ -13,6 +13,7 @@ struct MantizaApp: App {
     @State private var tab = 0
     @State private var request = ""
     @State private var booting = true
+    @State private var later: [String] = []   // scheduled tasks tapped while another task ran
 
     init() {
         // A quiet dark tab bar: grey items, the selected one white.
@@ -28,6 +29,8 @@ struct MantizaApp: App {
         item.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.text), .font: font]
         UITabBar.appearance().standardAppearance = bar
         UITabBar.appearance().scrollEdgeAppearance = bar
+        // Before any screen: a notification tap that launched the app must not be missed.
+        NotificationRouter.shared.start()
     }
 
     var body: some Scene {
@@ -62,6 +65,11 @@ struct MantizaApp: App {
                 agent.capture = capture
                 agent.pointer = pointer
                 agent.approvals.setUp()
+                // A schedule's notification was tapped: run it now, or right after the task running now.
+                Schedules.shared.start { prompt in
+                    tab = 0
+                    if agent.running { later.append(prompt) } else { agent.start(prompt) }
+                }
                 Net.start()
                 let old = Direct.removeOldClockAlarms()
                 if old > 0 { link.note("Removed \(old) old Mantiza alarm\(old == 1 ? "" : "s") (alarms now go into the Clock app)") }
@@ -93,6 +101,9 @@ struct MantizaApp: App {
             }
             // Siri ("Ask Mantiza"), the Control Centre button and the Live Activity's Stop button.
             .onChange(of: inbox.count) { _, _ in handle(inbox.take()) }
+            .onChange(of: agent.running) { _, running in
+                if !running, !later.isEmpty { agent.start(later.removeFirst()) }
+            }
             // Development builds: send waiting task reports to the debug inbox on the PC.
             .onChange(of: phase) { _, now in
                 if now == .active { Task { await RunLog.shared.flush() } }

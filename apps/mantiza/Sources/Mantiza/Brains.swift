@@ -318,6 +318,9 @@ final class BigBrain {
           \(PhoneState.names.map { "\"\($0)\"" }.joined(separator: ", ")); else null.
           Not for: alarms, timers, calls, messages, email, directions, calendar events, reminders (their own actions
           below), or anything that needs looking inside an app (screen step).
+        - "schedule" [time "HH:mm" 24h, days: ["monday",...] or [] for every day, text: the task to do then, as the
+          user said it]: Mantiza does a task at a set time, again and again ("every morning at 8 read my calendar",
+          "every weekday at 9 open Slack"). Not for alarms, timers or reminders: they have their own actions.
         - "alarm" [time "HH:mm" 24h, days: ["monday",...] for repeating or [] for once, text: label or null]
         - "timer" [seconds, text: label or null]
         - "event" [text: title, start "yyyy-MM-ddTHH:mm", end or null]: calendar event

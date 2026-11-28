@@ -58,7 +58,7 @@ final class Agent: ObservableObject {
     /// size (642 px wide): never wrong at ≥ 0.7 (66 of 82 tasks), wrong 4 times between 0.5 and 0.7.
     private let sure = 0.7
     /// Steps that never use the device (no taps, keys or bringing Mantiza forward).
-    static let noDevice: Set<String> = ["answer", "phone_info", "event", "reminder"]
+    static let noDevice: Set<String> = ["answer", "phone_info", "event", "reminder", "schedule"]
     /// Steps that only work while Mantiza is on screen (links, torch, brightness).
     static let needsFront: Set<String> = ["brightness", "flashlight", "directions"]
     private static let riskyWords = ["send", "pay", "buy", "order", "delete", "remove", "post", "share",
@@ -230,6 +230,20 @@ final class Agent: ObservableObject {
         switch step.action {
         case "answer":
             add("💬 " + (step.text ?? ""))
+            return true
+
+        case "schedule":
+            guard let time = step.time, let clock = Agent.clockTime(time),
+                  let task = step.text?.trimmingCharacters(in: .whitespacesAndNewlines), !task.isEmpty else {
+                end("❌ What should Mantiza do, and when?"); return false
+            }
+            let parts = time.split(separator: ":").compactMap { Int($0) }
+            guard parts.count == 2 else { end("❌ What time?"); return false }
+            let days = (step.days ?? []).compactMap(Schedules.weekday)
+            let s = Schedules.shared.add(prompt: task, hour: parts[0], minute: parts[1], days: days)
+            let when = Schedules.describe(s.days).lowercased() + " at " + clock.shown
+            answers.append("Scheduled \"\(s.prompt)\" \(when). I'll send a notification then: tap it and I'll do it.")
+            add("🗓 Scheduled \"\(s.prompt)\", \(when) (Device → Schedules can make it run by itself)")
             return true
 
         case "phone_info":

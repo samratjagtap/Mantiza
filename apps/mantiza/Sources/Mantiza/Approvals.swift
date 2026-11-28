@@ -6,24 +6,36 @@ import UserNotifications
 /// (long-press or pull down the banner to see the buttons). It also shows in the Task tab.
 /// No answer within a minute counts as "don't". Later: also on the device screen (buttons A/B).
 @MainActor
-final class Approvals: NSObject, ObservableObject {
+final class Approvals: ObservableObject {
     @Published var question: String?
     /// When the open question is a choice ("Which Azad?"), its options; nil for yes/no.
     @Published var choices: [String]?
 
     private var waiting: CheckedContinuation<Bool, Never>?
     private var choosing: CheckedContinuation<Int?, Never>?
-    private var approvalCategory: UNNotificationCategory?
     private var waitingID: String?
     private let center = UNUserNotificationCenter.current()
 
+    private var started = false
+
     func setUp() {
-        center.delegate = self
+        guard !started else { return }
+        started = true
         let approve = UNNotificationAction(identifier: "APPROVE", title: "Approve", options: [])
         let deny = UNNotificationAction(identifier: "DENY", title: "Don't", options: [.destructive])
-        let category = UNNotificationCategory(identifier: "MANTIZA_APPROVAL", actions: [approve, deny], intentIdentifiers: [])
-        approvalCategory = category
-        center.setNotificationCategories([category])
+        NotificationRouter.shared.register(UNNotificationCategory(identifier: "MANTIZA_APPROVAL", actions: [approve, deny],
+                                                                  intentIdentifiers: []))
+        // Taps on approval and choice notifications (stale ones are just dropped).
+        NotificationRouter.shared.handle { [weak self] reply in
+            guard reply.category == "MANTIZA_APPROVAL" || reply.category == "MANTIZA_CHOICE" else { return false }
+            guard let self, self.waitingID == reply.id else { return true }
+            if reply.action.hasPrefix("PICK_") {
+                self.pick(Int(reply.action.dropFirst(5)))
+            } else {
+                self.answer(reply.action == "APPROVE")
+            }
+            return true
+        }
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
@@ -57,7 +69,7 @@ final class Approvals: NSObject, ObservableObject {
         let actions = shown.enumerated().map { UNNotificationAction(identifier: "PICK_\($0.offset)", title: $0.element, options: []) }
             + [UNNotificationAction(identifier: "PICK_NONE", title: "None of these", options: [.destructive])]
         let choice = UNNotificationCategory(identifier: "MANTIZA_CHOICE", actions: actions, intentIdentifiers: [])
-        center.setNotificationCategories(Set([choice] + (approvalCategory.map { [$0] } ?? [])))
+        NotificationRouter.shared.register(choice)
         let id = UUID().uuidString
         let content = UNMutableNotificationContent()
         content.title = "Mantiza: which one?"
@@ -96,27 +108,5 @@ final class Approvals: NSObject, ObservableObject {
         waitingID = nil
         waiting?.resume(returning: approved)
         waiting = nil
-    }
-}
-
-extension Approvals: UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
-                                            withCompletionHandler completionHandler: @escaping () -> Void) {
-        let action = response.actionIdentifier
-        let id = response.notification.request.identifier
-        Task { @MainActor in
-            guard self.waitingID == id else { return }
-            if action.hasPrefix("PICK_") {
-                self.pick(Int(action.dropFirst(5)))
-            } else {
-                self.answer(action == "APPROVE")
-            }
-        }
-        completionHandler()
-    }
-
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
-                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound])
     }
 }

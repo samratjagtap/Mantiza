@@ -14,11 +14,12 @@ struct DeviceView: View {
     @EnvironmentObject var routines: RoutineStore
     @EnvironmentObject var voice: Voice
     @ObservedObject private var chime = Chime.shared
+    @ObservedObject private var schedules = Schedules.shared
     @ObservedObject private var blocked = BlockedApps.shared
     @ObservedObject private var notes = AppNotes.shared
     @State private var habitRuns = Shared.history.count
 
-    enum Page: Hashable { case setup, routines, notes, blocked, habits }
+    enum Page: Hashable { case setup, schedules, routines, notes, blocked, habits }
 
     private var bluetoothOn: Bool { link.bluetooth.lowercased().contains("on") }
     // Setup steps iOS can't check (AssistiveTouch's status was wrong on iOS 27): the user ticks them.
@@ -48,6 +49,7 @@ struct DeviceView: View {
                 case .notes: NotesPage()
                 case .blocked: BlockedPage()
                 case .habits: HabitsPage(runs: $habitRuns)
+                case .schedules: SchedulesPage()
                 }
             }
         }
@@ -211,6 +213,7 @@ struct DeviceView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
+            NavRow(icon: "calendar.badge.clock", title: "Schedules", value: count(schedules.all.count), page: Page.schedules)
             NavRow(icon: "arrow.triangle.2.circlepath", title: "Learned routines", value: count(routines.all.count), page: Page.routines)
             NavRow(icon: "note.text", title: "App notes", value: count(notes.all.count), page: Page.notes)
             NavRow(icon: "hand.raised", title: "Blocked apps", value: "\(blocked.names.count)", page: Page.blocked)
@@ -534,5 +537,220 @@ private struct HabitsPage: View {
                 .frame(maxWidth: .infinity)
             }
         }
+    }
+}
+
+// MARK: - Schedules
+
+private struct SchedulesPage: View {
+    @ObservedObject private var schedules = Schedules.shared
+    @State private var prompt = ""
+    @State private var time = Calendar.current.date(bySettingHour: 8, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var days: Set<Int> = []
+    @State private var open: UUID?
+    @FocusState private var typing: Bool
+
+    private var empty: Bool { prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        Page(title: "Schedules") {
+            Text("Mantiza does a task at a set time. Then you get a notification: tap it and Mantiza does it. You can also say it in a chat: \u{201C}every morning at 8, read my calendar\u{201D}.")
+                .font(Theme.sans(13)).foregroundStyle(Theme.dim)
+            if schedules.notificationsAllowed == false { notificationsOff }
+            newSchedule
+            if schedules.all.isEmpty {
+                Empty(text: "No schedules yet.")
+            } else {
+                ForEach(schedules.all) { s in
+                    ScheduleCard(schedule: s, open: $open)
+                }
+            }
+        }
+        .task { await schedules.refreshPermission() }
+    }
+
+    private var notificationsOff: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Notifications are off for Mantiza, so schedules can't remind you. Turn them on in Settings \u{2192} Notifications \u{2192} Mantiza.")
+                .font(Theme.sans(14)).foregroundStyle(Theme.text)
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+            }
+            .font(Theme.sans(14, .semibold)).foregroundStyle(Theme.magenta)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.corner, style: .continuous).stroke(Theme.magenta.opacity(0.5), lineWidth: 1))
+    }
+
+    private var newSchedule: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Label2("New schedule")
+            TextField("", text: $prompt, prompt: Text("What should Mantiza do?").foregroundStyle(Theme.dim), axis: .vertical)
+                .font(Theme.sans(15)).foregroundStyle(Theme.text).tint(Theme.magenta)
+                .lineLimit(1...3)
+                .focused($typing)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Theme.raised, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            HStack {
+                Text("Time").font(Theme.sans(15)).foregroundStyle(Theme.text)
+                Spacer()
+                DatePicker("Time", selection: $time, displayedComponents: .hourAndMinute)
+                    .labelsHidden()
+                    .colorScheme(.dark)
+            }
+            DayPicker(days: $days)
+            Button("Add schedule") {
+                let c = Calendar.current.dateComponents([.hour, .minute], from: time)
+                withAnimation {
+                    schedules.add(prompt: prompt, hour: c.hour ?? 8, minute: c.minute ?? 0, days: Array(days))
+                }
+                prompt = ""
+                days = []
+                typing = false
+            }
+            .buttonStyle(MainButton())
+            .disabled(empty)
+        }
+        .padding(16)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+    }
+}
+
+/// Seven round day buttons in the phone's week order; none picked means every day.
+private struct DayPicker: View {
+    @Binding var days: Set<Int>
+    var body: some View {
+        let cal = Calendar.current
+        let order = (0..<7).map { (cal.firstWeekday - 1 + $0) % 7 + 1 }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                ForEach(order, id: \.self) { day in
+                    let on = days.contains(day)
+                    Button {
+                        if on { days.remove(day) } else { days.insert(day) }
+                    } label: {
+                        Text(cal.veryShortWeekdaySymbols[day - 1])
+                            .font(Theme.sans(13, .semibold))
+                            .foregroundStyle(on ? .white : Theme.dim)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 34)
+                            .background(Circle().fill(on ? Theme.magenta : Theme.raised))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(cal.weekdaySymbols[day - 1])
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            Text(Schedules.describe(Array(days))).font(Theme.sans(12)).foregroundStyle(Theme.dim)
+        }
+    }
+}
+
+private struct ScheduleCard: View {
+    @EnvironmentObject var agent: Agent
+    @ObservedObject private var schedules = Schedules.shared
+    let schedule: Schedules.Schedule
+    @Binding var open: UUID?
+    @State private var copied = false
+
+    private var expanded: Bool { open == schedule.id }
+
+    private func set(_ change: (inout Schedules.Schedule) -> Void) {
+        var s = schedule
+        change(&s)
+        withAnimation(.easeOut(duration: 0.15)) { schedules.update(s) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(Schedules.time(schedule.hour, schedule.minute))
+                        .font(Theme.sans(24, .semibold))
+                        .foregroundStyle(schedule.on ? Theme.text : Theme.dim)
+                    Text(Schedules.describe(schedule.days) + " \u{00B7} " + (schedule.handsFree ? "Runs by itself" : "Reminder"))
+                        .font(Theme.sans(12)).foregroundStyle(Theme.dim)
+                }
+                Spacer()
+                Toggle("On", isOn: Binding(get: { schedule.on }, set: { v in set { $0.on = v } }))
+                    .labelsHidden().tint(Theme.green)
+            }
+            Text(schedule.prompt).font(Theme.sans(15)).foregroundStyle(Theme.text.opacity(schedule.on ? 0.9 : 0.5))
+                .fixedSize(horizontal: false, vertical: true)
+            Button { withAnimation(.easeOut(duration: 0.2)) { open = expanded ? nil : schedule.id } } label: {
+                HStack(spacing: 5) {
+                    Text(expanded ? "Fewer options" : "Options").font(Theme.sans(13))
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 180 : 0))
+                }
+                .foregroundStyle(Theme.dim)
+            }
+            .buttonStyle(.plain)
+            if expanded { options }
+        }
+        .padding(16)
+        .background(Theme.panel, in: RoundedRectangle(cornerRadius: Theme.corner, style: .continuous))
+    }
+
+    @ViewBuilder private var options: some View {
+        Rectangle().fill(Theme.line).frame(height: 0.5)
+        Toggle(isOn: Binding(get: { schedule.handsFree }, set: { v in set { $0.handsFree = v } })) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Run by itself").font(Theme.sans(15)).foregroundStyle(Theme.text)
+                Text("No tap needed. Set up once in the Shortcuts app.").font(Theme.sans(12)).foregroundStyle(Theme.dim)
+            }
+        }
+        .tint(Theme.green)
+        if schedule.handsFree {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(Array(steps.enumerated()), id: \.offset) { i, step in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("\(i + 1).").font(Theme.mono(12, .medium)).foregroundStyle(Theme.dim)
+                        Text(step).font(Theme.sans(13)).foregroundStyle(Theme.text.opacity(0.85))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            HStack(spacing: 10) {
+                Button(copied ? "Copied" : "Copy link") {
+                    UIPasteboard.general.string = schedule.link.absoluteString
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                }
+                .buttonStyle(MainButton(filled: false))
+                Button("Open Shortcuts") {
+                    if let url = URL(string: "shortcuts://") { UIApplication.shared.open(url) }
+                }
+                .buttonStyle(MainButton(filled: false))
+            }
+            Text("Mantiza sends no reminder for this one. It works on the screen only while the iPhone is unlocked. Deleting the schedule here doesn't delete the Shortcuts automation.")
+                .font(Theme.sans(12)).foregroundStyle(Theme.dim)
+        }
+        HStack(spacing: 10) {
+            Button("Run now") { agent.start(schedule.prompt) }
+                .buttonStyle(MainButton(filled: false))
+                .disabled(agent.running)
+            Button { withAnimation { schedules.delete(schedule.id) } } label: {
+                Text("Delete").font(Theme.sans(15, .semibold)).foregroundStyle(Theme.magenta)
+                    .padding(.vertical, 13).frame(maxWidth: .infinity)
+                    .background(Theme.raised, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var steps: [String] {
+        let time = Schedules.time(schedule.hour, schedule.minute)
+        let days = Schedules.describe(schedule.days)
+        return [
+            "Tap Copy link below.",
+            "Open Shortcuts \u{2192} Automation \u{2192} + \u{2192} Time of Day.",
+            "Set \(time), repeat \(days.lowercased()). Choose Run Immediately, then Next.",
+            "Create New Shortcut (or New Blank Automation) \u{2192} Add Action \u{2192} search \u{201C}Open URLs\u{201D}.",
+            "Paste the link into the action, then tap Done.",
+        ]
     }
 }

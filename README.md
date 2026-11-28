@@ -11,6 +11,7 @@ This repo holds the app, the device firmware and the planning docs. Mantiza uses
 | Area | What Mantiza does | State |
 |---|---|---|
 | **Siri's jobs go to Siri** | Alarms, timers, phone settings, weather, notes, music: the StickS3 holds the Siri key, types the request and reads Siri's answer ([research](Docs/Mantiza%20Roadmap/siri-ios27-research.md)) | Built; the hand-off was tested by hand, the app doing it alone is *to check* |
+| **Schedules** | Tasks at set times ("every morning at 8, read my calendar"), made in chat or Device → Schedules. A notification at the time runs it with one tap; or it runs by itself through a one-time Shortcuts automation that opens the `mantiza://run` link | Built, *to check* |
 | **Chat** | The Task tab is a chat: requests and answers as messages, the steps folded under each answer, chats kept on the phone with History (search, delete). Follow-ups use the chat ("send it again") | Built, *to check* |
 | **Direct iOS routes** | Calls, WhatsApp, SMS, email, directions, calendar, reminders, flashlight, brightness, device keys | Built |
 | **AI screen route** | Looks at the screen and acts when nothing else can. Both brains are asked at once; a step should take about 1.5–3 s instead of 6–7 s ([speed research](Docs/Mantiza%20Roadmap/speed-research.md)) | Built; speed is an estimate, *to check* |
